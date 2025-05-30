@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -195,8 +196,8 @@ const NetworkVisualization = () => {
                     variant={viewType === type ? "default" : "outline"}
                     onClick={() => setViewType(type)}
                     className={viewType === type 
-                      ? 'bg-purple-600 hover:bg-purple-700' 
-                      : 'border-white/20 text-gray-300 hover:bg-white/10'
+                      ? "bg-purple-600 hover:bg-purple-700" 
+                      : "border-white/20 text-gray-300 hover:bg-white/10"
                     }
                   >
                     {type}
@@ -304,8 +305,8 @@ const NetworkVisualization = () => {
                 <Badge 
                   className={
                     selectedValidatorData.status === 'active' 
-                      ? 'bg-green-500/20 text-green-400 border-green-500/30' 
-                      : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                      ? "bg-green-500/20 text-green-400 border-green-500/30" 
+                      : "bg-gray-500/20 text-gray-400 border-gray-500/30"
                   }
                 >
                   {selectedValidatorData.status}
