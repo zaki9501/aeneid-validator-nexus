@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ZoomIn, ZoomOut, RotateCcw, Filter } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { mockValidators } from '../data/mockData';
 
 const NetworkVisualization = () => {
@@ -28,7 +28,7 @@ const NetworkVisualization = () => {
         size: Math.max(5, (validator.stake / 200000) * 15),
         performance: validator.performanceScore,
         status: validator.status,
-        connections: Math.floor(Math.random() * 5) + 2, // Random connections
+        connections: Math.floor(Math.random() * 5) + 2,
       };
     });
   };
@@ -173,7 +173,6 @@ const NetworkVisualization = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const selectedNode = selectedValidator ? nodes.find(n => n.id === selectedValidator) : null;
   const selectedValidatorData = selectedValidator ? mockValidators.find(v => v.address === selectedValidator) : null;
 
   return (
