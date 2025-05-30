@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -302,11 +303,13 @@ const NetworkVisualization = () => {
                   </div>
                 </div>
                 
-                <Badge className={`${
-                  selectedValidatorData.status === 'active' 
-                    ? 'bg-green-500/20 text-green-400 border-green-500/30' 
-                    : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-                }`}>
+                <Badge 
+                  className={
+                    selectedValidatorData.status === 'active' 
+                      ? 'bg-green-500/20 text-green-400 border-green-500/30' 
+                      : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                  }
+                >
                   {selectedValidatorData.status}
                 </Badge>
               </div>
