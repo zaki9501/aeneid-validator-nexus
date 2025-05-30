@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -194,11 +195,10 @@ const NetworkVisualization = () => {
                     key={type}
                     variant={viewType === type ? "default" : "outline"}
                     onClick={() => setViewType(type)}
-                    className={`${
-                      viewType === type 
-                        ? 'bg-purple-600 hover:bg-purple-700' 
-                        : 'border-white/20 text-gray-300 hover:bg-white/10'
-                    }`}
+                    className={viewType === type 
+                      ? 'bg-purple-600 hover:bg-purple-700' 
+                      : 'border-white/20 text-gray-300 hover:bg-white/10'
+                    }
                   >
                     {type}
                   </Button>
