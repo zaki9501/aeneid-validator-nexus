@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +15,8 @@ const ValidatorDetails = () => {
   const { data: validators = [], isLoading, error } = useQuery({
     queryKey: ['validators'],
     queryFn: fetchValidators,
+    retry: 2,
+    retryDelay: 1000,
   });
 
   // Try to find validator by address (could be operatorAddress, accountAddress, or consensusAddress)
@@ -25,6 +28,7 @@ const ValidatorDetails = () => {
   console.log('Looking for validator with address:', address);
   console.log('Available validators:', validators.map(v => ({ name: v.name, address: v.address })));
   console.log('Found validator:', validator);
+  console.log('API Error:', error);
 
   if (isLoading) {
     return (
@@ -38,13 +42,43 @@ const ValidatorDetails = () => {
     );
   }
 
-  if (error || !validator) {
+  if (error) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
+          <h2 className="text-2xl font-bold text-white mb-4">Error Loading Validators</h2>
+          <p className="text-gray-400 mb-4">Failed to fetch validator data. Please try again later.</p>
+          <p className="text-sm text-gray-500 mb-4">Error: {error instanceof Error ? error.message : 'Unknown error'}</p>
+          <div className="space-y-2">
+            <Button 
+              onClick={() => window.location.reload()} 
+              className="bg-purple-600 hover:bg-purple-700 mr-2"
+            >
+              Retry
+            </Button>
+            <Button 
+              onClick={() => window.location.href = '/validators'} 
+              variant="outline"
+              className="border-white/20 text-gray-300 hover:bg-white/10"
+            >
+              Browse All Validators
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!validator) {
     return (
       <div className="min-h-screen p-6 flex items-center justify-center">
         <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
           <h2 className="text-2xl font-bold text-white mb-4">Validator Not Found</h2>
-          <p className="text-gray-400 mb-4">The validator address you're looking for doesn't exist or failed to load.</p>
+          <p className="text-gray-400 mb-4">The validator address you're looking for doesn't exist.</p>
           <p className="text-sm text-gray-500 mb-4">Address: {address}</p>
+          <p className="text-sm text-gray-400 mb-4">
+            Available validators: {validators.length}
+          </p>
           <Button 
             onClick={() => window.location.href = '/validators'} 
             className="bg-purple-600 hover:bg-purple-700"
