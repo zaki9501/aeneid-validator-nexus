@@ -1,4 +1,4 @@
-
+// Keep existing interfaces for backward compatibility and fallback data
 export interface Validator {
   address: string;
   name: string;
@@ -31,6 +31,7 @@ export interface RewardData {
   validatorRewards: { [address: string]: number };
 }
 
+// Fallback mock data in case API fails
 export const mockValidators: Validator[] = [
   {
     address: '0x1234567890abcdef1234567890abcdef12345678',

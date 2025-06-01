@@ -1,19 +1,11 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
-
-// Define types for validators and nodes
-interface Validator {
-  address: string;
-  name: string;
-  stake: number;
-  performanceScore: number;
-  uptime: number;
-  status: 'active' | 'inactive';
-  region: string;
-}
+import { ZoomIn, ZoomOut, RotateCcw, Loader2 } from 'lucide-react';
+import { fetchValidators, Validator } from '../services/validatorApi';
 
 interface Node {
   id: string;
@@ -22,41 +14,13 @@ interface Node {
   y: number;
   size: number;
   performance: number;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'slashed';
   connections: number;
   region: string;
+  uptime: number;
+  stake: number;
+  commission: number;
 }
-
-// Sample mockValidators data (replace with actual import)
-const mockValidators: Validator[] = [
-  {
-    address: '0x123',
-    name: 'Validator 1',
-    stake: 100000,
-    performanceScore: 95,
-    uptime: 99.9,
-    status: 'active',
-    region: 'North America',
-  },
-  {
-    address: '0x456',
-    name: 'Validator 2',
-    stake: 200000,
-    performanceScore: 88,
-    uptime: 98.5,
-    status: 'inactive',
-    region: 'Europe',
-  },
-  {
-    address: '0x789',
-    name: 'Validator 3',
-    stake: 150000,
-    performanceScore: 92,
-    uptime: 99.0,
-    status: 'active',
-    region: 'Asia',
-  },
-];
 
 const NetworkVisualization = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -67,13 +31,21 @@ const NetworkVisualization = () => {
   const [viewType, setViewType] = useState<'network' | 'geographic' | 'clusters'>('network');
   const [selectedValidator, setSelectedValidator] = useState<string | null>(null);
 
+  const { data: validators = [], isLoading, error } = useQuery({
+    queryKey: ['validators'],
+    queryFn: fetchValidators,
+    refetchInterval: 30000,
+  });
+
   // Memoize node generation to prevent recalculation on every render
   const generateNodes = useMemo(() => {
     return () => {
-      return mockValidators.map((validator, index) => {
+      return validators.map((validator, index) => {
         let x, y;
         if (viewType === 'geographic') {
-          // Approximate coordinates for regions
+          // Since API doesn't provide region, distribute randomly
+          const regions = ['North America', 'Europe', 'Asia', 'Africa', 'South America', 'Australia'];
+          const randomRegion = regions[index % regions.length];
           const regionCoords: { [key: string]: { x: number; y: number } } = {
             'North America': { x: -200, y: 0 },
             'Europe': { x: 0, y: -100 },
@@ -82,49 +54,54 @@ const NetworkVisualization = () => {
             'South America': { x: -100, y: 200 },
             'Australia': { x: 200, y: 200 },
           };
-          const coords = regionCoords[validator.region] || { x: 0, y: 0 };
-          x = coords.x + (Math.random() - 0.5) * 50; // Add jitter
+          const coords = regionCoords[randomRegion] || { x: 0, y: 0 };
+          x = coords.x + (Math.random() - 0.5) * 50;
           y = coords.y + (Math.random() - 0.5) * 50;
+        } else if (viewType === 'clusters') {
+          // Cluster by performance score
+          const performanceGroup = Math.floor(validator.performanceScore / 25);
+          const angle = (index / validators.length) * 2 * Math.PI;
+          const radius = 100 + performanceGroup * 50;
+          x = Math.cos(angle) * radius;
+          y = Math.sin(angle) * radius;
         } else {
-          // Circular layout for network/clusters
-          const angle = (index / mockValidators.length) * 2 * Math.PI;
+          // Circular layout for network
+          const angle = (index / validators.length) * 2 * Math.PI;
           const radius = 200 + Math.random() * 100;
           x = Math.cos(angle) * radius;
           y = Math.sin(angle) * radius;
         }
+        
         return {
           id: validator.address,
           name: validator.name,
           x,
           y,
-          size: Math.max(5, (validator.stake / 200000) * 15),
+          size: Math.max(5, Math.min(20, (validator.stake / 10000000) * 15)), // Scale based on stake
           performance: validator.performanceScore,
           status: validator.status,
           connections: Math.floor(Math.random() * 5) + 2,
-          region: validator.region,
+          region: validator.region || 'Unknown',
+          uptime: validator.uptime,
+          stake: validator.stake,
+          commission: validator.commission,
         };
       });
     };
-  }, [viewType]);
+  }, [validators, viewType]);
 
-  const [nodes, setNodes] = useState<Node[]>(generateNodes());
+  const [nodes, setNodes] = useState<Node[]>([]);
 
-  // Update nodes when viewType changes
+  // Update nodes when validators or viewType changes
   useEffect(() => {
     setNodes(generateNodes());
-  }, [viewType, generateNodes]);
+  }, [generateNodes]);
 
   const drawNetwork = () => {
     const canvas = canvasRef.current;
-    if (!canvas) {
-      console.error('Canvas not available');
-      return;
-    }
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      console.error('Canvas context not available');
-      return;
-    }
+    if (!ctx) return;
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -202,7 +179,6 @@ const NetworkVisualization = () => {
       const deltaY = e.clientY - lastMousePos.y;
       setOffset((prev) => {
         const newOffset = { x: prev.x + deltaX, y: prev.y + deltaY };
-        // Clamp panning to prevent nodes from going out of view
         const canvas = canvasRef.current;
         if (canvas) {
           return {
@@ -265,8 +241,31 @@ const NetworkVisualization = () => {
   }, []);
 
   const selectedValidatorData = selectedValidator
-    ? mockValidators.find((v) => v.address === selectedValidator)
+    ? validators.find((v) => v.address === selectedValidator)
     : null;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
+          <Loader2 className="w-8 h-8 animate-spin text-purple-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-4">Loading Network</h2>
+          <p className="text-gray-400">Fetching validator network data...</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
+          <h2 className="text-2xl font-bold text-white mb-4">Error Loading Network</h2>
+          <p className="text-gray-400">Failed to fetch network data. Please try again later.</p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-6">
@@ -363,7 +362,7 @@ const NetworkVisualization = () => {
               </div>
               <div className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <span className="text-xs text-gray-400">Poor (&lt;85%)</span>
+                <span className="text-xs text-gray-400">Poor (Less than 85%)</span>
               </div>
             </div>
           </Card>
@@ -386,22 +385,24 @@ const NetworkVisualization = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Uptime</span>
-                    <span className="text-white">{selectedValidatorData.uptime.toFixed(1)}%</span>
+                    <span className="text-white">{(selectedValidatorData.uptime * 100).toFixed(1)}%</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Stake</span>
-                    <span className="text-white">{(selectedValidatorData.stake / 1000).toFixed(0)}K</span>
+                    <span className="text-white">{(selectedValidatorData.stake / 1000000).toFixed(1)}M</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-400">Region</span>
-                    <span className="text-white">{selectedValidatorData.region}</span>
+                    <span className="text-gray-400">Commission</span>
+                    <span className="text-white">{selectedValidatorData.commission.toFixed(1)}%</span>
                   </div>
                 </div>
                 <Badge
                   className={
                     selectedValidatorData.status === 'active'
                       ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                      : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                      : selectedValidatorData.status === 'slashed' 
+                        ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                        : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
                   }
                 >
                   {selectedValidatorData.status}
@@ -438,7 +439,7 @@ const NetworkVisualization = () => {
           <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
             <div className="text-center">
               <p className="text-2xl font-bold text-white">
-                {(nodes.reduce((sum, n) => sum + n.performance, 0) / nodes.length).toFixed(1)}
+                {nodes.length > 0 ? (nodes.reduce((sum, n) => sum + n.performance, 0) / nodes.length).toFixed(1) : '0'}
               </p>
               <p className="text-gray-400">Avg Performance</p>
             </div>

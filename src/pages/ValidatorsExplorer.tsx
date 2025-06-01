@@ -1,12 +1,13 @@
 
 import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Search, ChevronUp, ChevronDown } from 'lucide-react';
-import { mockValidators, Validator } from '../data/mockData';
+import { Search, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
+import { fetchValidators, Validator } from '../services/validatorApi';
 
 const ValidatorsExplorer = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -15,6 +16,12 @@ const ValidatorsExplorer = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  const { data: validators = [], isLoading, error } = useQuery({
+    queryKey: ['validators'],
+    queryFn: fetchValidators,
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
 
   const handleSort = (field: keyof Validator) => {
     if (sortField === field) {
@@ -26,7 +33,7 @@ const ValidatorsExplorer = () => {
   };
 
   const filteredAndSortedValidators = useMemo(() => {
-    let filtered = mockValidators.filter(validator => {
+    let filtered = validators.filter(validator => {
       const matchesSearch = 
         validator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         validator.address.toLowerCase().includes(searchTerm.toLowerCase());
@@ -55,7 +62,7 @@ const ValidatorsExplorer = () => {
     });
 
     return filtered;
-  }, [searchTerm, statusFilter, sortField, sortDirection]);
+  }, [validators, searchTerm, statusFilter, sortField, sortDirection]);
 
   const totalPages = Math.ceil(filteredAndSortedValidators.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -76,6 +83,17 @@ const ValidatorsExplorer = () => {
       default: return 'bg-gray-500/20 text-gray-400 border-gray-500/30';
     }
   };
+
+  if (error) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
+          <h2 className="text-2xl font-bold text-white mb-4">Error Loading Validators</h2>
+          <p className="text-gray-400">Failed to fetch validator data. Please try again later.</p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-6">
@@ -117,167 +135,197 @@ const ValidatorsExplorer = () => {
           </div>
         </Card>
 
-        {/* Validators Table */}
-        <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-white/10">
-                  <th 
-                    className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
-                    onClick={() => handleSort('name')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Validator
-                      <SortIcon field="name" />
-                    </div>
-                  </th>
-                  <th 
-                    className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
-                    onClick={() => handleSort('stake')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Stake
-                      <SortIcon field="stake" />
-                    </div>
-                  </th>
-                  <th 
-                    className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
-                    onClick={() => handleSort('uptime')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Uptime
-                      <SortIcon field="uptime" />
-                    </div>
-                  </th>
-                  <th 
-                    className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
-                    onClick={() => handleSort('performanceScore')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Performance
-                      <SortIcon field="performanceScore" />
-                    </div>
-                  </th>
-                  <th 
-                    className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
-                    onClick={() => handleSort('rewardsEarned')}
-                  >
-                    <div className="flex items-center gap-2">
-                      Rewards
-                      <SortIcon field="rewardsEarned" />
-                    </div>
-                  </th>
-                  <th className="text-left p-4 text-gray-300">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedValidators.map((validator) => (
-                  <tr key={validator.address} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                    <td className="p-4">
-                      <Link 
-                        to={`/validators/${validator.address}`}
-                        className="hover:text-purple-400 transition-colors"
-                      >
-                        <div>
-                          <p className="text-white font-medium">{validator.name}</p>
-                          <p className="text-sm text-gray-400">
-                            {validator.address.slice(0, 10)}...{validator.address.slice(-8)}
-                          </p>
-                        </div>
-                      </Link>
-                    </td>
-                    <td className="p-4 text-white">
-                      {(validator.stake / 1000).toFixed(0)}K
-                    </td>
-                    <td className="p-4 text-white">
-                      {validator.uptime.toFixed(1)}%
-                    </td>
-                    <td className="p-4 text-white">
-                      {validator.performanceScore.toFixed(1)}
-                    </td>
-                    <td className="p-4 text-white">
-                      {validator.rewardsEarned.toLocaleString()}
-                    </td>
-                    <td className="p-4">
-                      <Badge className={getStatusColor(validator.status)}>
-                        {validator.status}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex justify-center items-center space-x-2 mt-6">
-              <Button
-                variant="outline"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(currentPage - 1)}
-                className="border-white/20 text-gray-300 hover:bg-white/10"
-              >
-                Previous
-              </Button>
-              
-              <div className="flex space-x-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                  <Button
-                    key={page}
-                    variant={currentPage === page ? "default" : "outline"}
-                    onClick={() => setCurrentPage(page)}
-                    className={`w-10 h-10 ${
-                      currentPage === page 
-                        ? 'bg-purple-600 hover:bg-purple-700' 
-                        : 'border-white/20 text-gray-300 hover:bg-white/10'
-                    }`}
-                  >
-                    {page}
-                  </Button>
-                ))}
-              </div>
-
-              <Button
-                variant="outline"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(currentPage + 1)}
-                className="border-white/20 text-gray-300 hover:bg-white/10"
-              >
-                Next
-              </Button>
+        {/* Loading State */}
+        {isLoading && (
+          <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10">
+            <div className="flex items-center justify-center space-x-2">
+              <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+              <span className="text-white">Loading validators...</span>
             </div>
-          )}
-        </Card>
+          </Card>
+        )}
+
+        {/* Validators Table */}
+        {!isLoading && (
+          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-white/10">
+                    <th 
+                      className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
+                      onClick={() => handleSort('name')}
+                    >
+                      <div className="flex items-center gap-2">
+                        Validator
+                        <SortIcon field="name" />
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
+                      onClick={() => handleSort('stake')}
+                    >
+                      <div className="flex items-center gap-2">
+                        Stake
+                        <SortIcon field="stake" />
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
+                      onClick={() => handleSort('uptime')}
+                    >
+                      <div className="flex items-center gap-2">
+                        Uptime
+                        <SortIcon field="uptime" />
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
+                      onClick={() => handleSort('performanceScore')}
+                    >
+                      <div className="flex items-center gap-2">
+                        Performance
+                        <SortIcon field="performanceScore" />
+                      </div>
+                    </th>
+                    <th 
+                      className="text-left p-4 text-gray-300 cursor-pointer hover:text-white transition-colors"
+                      onClick={() => handleSort('commission')}
+                    >
+                      <div className="flex items-center gap-2">
+                        Commission
+                        <SortIcon field="commission" />
+                      </div>
+                    </th>
+                    <th className="text-left p-4 text-gray-300">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedValidators.map((validator) => (
+                    <tr key={validator.address} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                      <td className="p-4">
+                        <Link 
+                          to={`/validators/${validator.address}`}
+                          className="hover:text-purple-400 transition-colors"
+                        >
+                          <div className="flex items-center space-x-3">
+                            {validator.logo && (
+                              <img 
+                                src={validator.logo} 
+                                alt={validator.name}
+                                className="w-8 h-8 rounded-full"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  target.style.display = 'none';
+                                }}
+                              />
+                            )}
+                            <div>
+                              <p className="text-white font-medium">{validator.name}</p>
+                              <p className="text-sm text-gray-400">
+                                {validator.address.slice(0, 10)}...{validator.address.slice(-8)}
+                              </p>
+                            </div>
+                          </div>
+                        </Link>
+                      </td>
+                      <td className="p-4 text-white">
+                        {(validator.stake / 1000000).toFixed(1)}M
+                      </td>
+                      <td className="p-4 text-white">
+                        {(validator.uptime * 100).toFixed(1)}%
+                      </td>
+                      <td className="p-4 text-white">
+                        {validator.performanceScore.toFixed(1)}
+                      </td>
+                      <td className="p-4 text-white">
+                        {validator.commission.toFixed(1)}%
+                      </td>
+                      <td className="p-4">
+                        <Badge className={getStatusColor(validator.status)}>
+                          {validator.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center space-x-2 mt-6">
+                <Button
+                  variant="outline"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  className="border-white/20 text-gray-300 hover:bg-white/10"
+                >
+                  Previous
+                </Button>
+                
+                <div className="flex space-x-1">
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                    <Button
+                      key={page}
+                      variant={currentPage === page ? "default" : "outline"}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-10 h-10 ${
+                        currentPage === page 
+                          ? 'bg-purple-600 hover:bg-purple-700' 
+                          : 'border-white/20 text-gray-300 hover:bg-white/10'
+                      }`}
+                    >
+                      {page}
+                    </Button>
+                  ))}
+                </div>
+
+                <Button
+                  variant="outline"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  className="border-white/20 text-gray-300 hover:bg-white/10"
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+          </Card>
+        )}
 
         {/* Stats Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-white">{filteredAndSortedValidators.length}</p>
-              <p className="text-gray-400">Matching Validators</p>
-            </div>
-          </Card>
-          
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-white">
-                {(filteredAndSortedValidators.reduce((sum, v) => sum + v.stake, 0) / 1000000).toFixed(1)}M
-              </p>
-              <p className="text-gray-400">Total Stake</p>
-            </div>
-          </Card>
-          
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
-            <div className="text-center">
-              <p className="text-2xl font-bold text-white">
-                {(filteredAndSortedValidators.reduce((sum, v) => sum + v.uptime, 0) / filteredAndSortedValidators.length).toFixed(1)}%
-              </p>
-              <p className="text-gray-400">Avg Uptime</p>
-            </div>
-          </Card>
-        </div>
+        {!isLoading && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-white">{filteredAndSortedValidators.length}</p>
+                <p className="text-gray-400">Matching Validators</p>
+              </div>
+            </Card>
+            
+            <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-white">
+                  {(filteredAndSortedValidators.reduce((sum, v) => sum + v.stake, 0) / 1000000).toFixed(1)}M
+                </p>
+                <p className="text-gray-400">Total Stake</p>
+              </div>
+            </Card>
+            
+            <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-white">
+                  {filteredAndSortedValidators.length > 0 
+                    ? ((filteredAndSortedValidators.reduce((sum, v) => sum + v.uptime, 0) / filteredAndSortedValidators.length) * 100).toFixed(1)
+                    : '0'
+                  }%
+                </p>
+                <p className="text-gray-400">Avg Uptime</p>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );

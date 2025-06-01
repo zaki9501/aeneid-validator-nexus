@@ -1,37 +1,56 @@
 
 import React from 'react';
 import { useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { TrendingUp, Users, Award, Activity, Download } from 'lucide-react';
-import { mockValidators } from '../data/mockData';
+import { TrendingUp, Users, Award, Activity, Download, Loader2 } from 'lucide-react';
+import { fetchValidators } from '../services/validatorApi';
 
 const ValidatorDetails = () => {
   const { address } = useParams();
-  const validator = mockValidators.find(v => v.address === address);
+  
+  const { data: validators = [], isLoading, error } = useQuery({
+    queryKey: ['validators'],
+    queryFn: fetchValidators,
+  });
 
-  if (!validator) {
+  const validator = validators.find(v => v.address === address);
+
+  if (isLoading) {
     return (
       <div className="min-h-screen p-6 flex items-center justify-center">
         <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
-          <h2 className="text-2xl font-bold text-white mb-4">Validator Not Found</h2>
-          <p className="text-gray-400">The validator address you're looking for doesn't exist.</p>
+          <Loader2 className="w-8 h-8 animate-spin text-purple-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-4">Loading Validator</h2>
+          <p className="text-gray-400">Fetching validator information...</p>
         </Card>
       </div>
     );
   }
 
-  // Mock historical data for charts
+  if (error || !validator) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
+          <h2 className="text-2xl font-bold text-white mb-4">Validator Not Found</h2>
+          <p className="text-gray-400">The validator address you're looking for doesn't exist or failed to load.</p>
+        </Card>
+      </div>
+    );
+  }
+
+  // Mock historical data for charts (API doesn't provide historical data)
   const stakeHistory = Array.from({ length: 30 }, (_, i) => ({
     day: i + 1,
-    stake: validator.stake + (Math.random() - 0.5) * 100000,
+    stake: validator.stake + (Math.random() - 0.5) * (validator.stake * 0.1),
   }));
 
   const uptimeHistory = Array.from({ length: 30 }, (_, i) => ({
     day: i + 1,
-    uptime: Math.max(90, Math.min(100, validator.uptime + (Math.random() - 0.5) * 5)),
+    uptime: Math.max(0.9, Math.min(1, validator.uptime + (Math.random() - 0.5) * 0.05)) * 100,
   }));
 
   const getStatusColor = (status: string) => {
@@ -43,7 +62,7 @@ const ValidatorDetails = () => {
     }
   };
 
-  const rank = mockValidators
+  const rank = validators
     .sort((a, b) => b.performanceScore - a.performanceScore)
     .findIndex(v => v.address === validator.address) + 1;
 
@@ -54,12 +73,24 @@ const ValidatorDetails = () => {
         <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex items-center space-x-6">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center text-white text-2xl font-bold">
-                {validator.name.charAt(0)}
-              </div>
+              {validator.logo ? (
+                <img 
+                  src={validator.logo} 
+                  alt={validator.name}
+                  className="w-16 h-16 rounded-full"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center text-white text-2xl font-bold">
+                  {validator.name.charAt(0)}
+                </div>
+              )}
               <div>
                 <h1 className="text-3xl font-bold text-white">{validator.name}</h1>
-                <p className="text-gray-400 font-mono">{validator.address}</p>
+                <p className="text-gray-400 font-mono break-all">{validator.address}</p>
                 <div className="flex items-center space-x-4 mt-2">
                   <Badge className={getStatusColor(validator.status)}>
                     {validator.status}
@@ -101,7 +132,7 @@ const ValidatorDetails = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-400">Uptime</p>
-                <p className="text-2xl font-bold text-white">{validator.uptime.toFixed(1)}%</p>
+                <p className="text-2xl font-bold text-white">{(validator.uptime * 100).toFixed(1)}%</p>
               </div>
             </div>
           </Card>
@@ -148,7 +179,7 @@ const ValidatorDetails = () => {
                   <YAxis 
                     stroke="rgba(255,255,255,0.6)"
                     fontSize={12}
-                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+                    tickFormatter={(value) => `${(value / 1000000).toFixed(1)}M`}
                   />
                   <Tooltip 
                     contentStyle={{ 
@@ -224,11 +255,7 @@ const ValidatorDetails = () => {
             <div className="space-y-4">
               <div className="flex justify-between">
                 <span className="text-gray-400">Commission Rate</span>
-                <span className="text-white">{validator.commission}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Region</span>
-                <span className="text-white">{validator.region}</span>
+                <span className="text-white">{validator.commission.toFixed(1)}%</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Joined Epoch</span>
@@ -241,6 +268,10 @@ const ValidatorDetails = () => {
               <div className="flex justify-between">
                 <span className="text-gray-400">Total Stake</span>
                 <span className="text-white">{validator.stake.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Delegators</span>
+                <span className="text-white">{validator.delegators}</span>
               </div>
             </div>
           </Card>
@@ -264,12 +295,12 @@ const ValidatorDetails = () => {
               <div>
                 <div className="flex justify-between mb-2">
                   <span className="text-gray-400">Uptime</span>
-                  <span className="text-white">{validator.uptime.toFixed(1)}%</span>
+                  <span className="text-white">{(validator.uptime * 100).toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-2">
                   <div 
                     className="bg-gradient-to-r from-green-500 to-emerald-500 h-2 rounded-full" 
-                    style={{ width: `${validator.uptime}%` }}
+                    style={{ width: `${validator.uptime * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -277,7 +308,7 @@ const ValidatorDetails = () => {
               <div className="pt-4 border-t border-white/10">
                 <p className="text-sm text-gray-400 mb-2">Leaderboard Position</p>
                 <p className="text-2xl font-bold text-white">#{rank}</p>
-                <p className="text-sm text-gray-400">out of {mockValidators.length} validators</p>
+                <p className="text-sm text-gray-400">out of {validators.length} validators</p>
               </div>
             </div>
           </Card>
