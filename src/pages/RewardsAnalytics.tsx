@@ -41,6 +41,110 @@ const RewardsAnalytics = () => {
   const rewardGrowth = filteredData.length > 1 ? 
     ((filteredData[filteredData.length - 1].totalRewards - filteredData[0].totalRewards) / filteredData[0].totalRewards) * 100 : 0;
 
+  const renderChart = () => {
+    if (chartType === 'total') {
+      return (
+        <AreaChart data={filteredData}>
+          <defs>
+            <linearGradient id="rewardGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+          <XAxis 
+            dataKey="epoch" 
+            stroke="rgba(255,255,255,0.6)"
+            fontSize={12}
+          />
+          <YAxis 
+            stroke="rgba(255,255,255,0.6)"
+            fontSize={12}
+            tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+          />
+          <Tooltip 
+            contentStyle={{ 
+              backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              color: 'white'
+            }}
+            formatter={(value: number) => [`${value.toLocaleString()}`, 'Total Rewards']}
+          />
+          <Area 
+            type="monotone" 
+            dataKey="totalRewards" 
+            stroke="#8b5cf6" 
+            fill="url(#rewardGradient)"
+            strokeWidth={2}
+          />
+        </AreaChart>
+      );
+    }
+
+    if (chartType === 'individual') {
+      return (
+        <BarChart data={validatorRewards.slice(0, 10)}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+          <XAxis 
+            dataKey="name" 
+            stroke="rgba(255,255,255,0.6)"
+            fontSize={10}
+            angle={-45}
+            textAnchor="end"
+            height={80}
+          />
+          <YAxis 
+            stroke="rgba(255,255,255,0.6)"
+            fontSize={12}
+            tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+          />
+          <Tooltip 
+            contentStyle={{ 
+              backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              color: 'white'
+            }}
+            formatter={(value: number) => [`${value.toLocaleString()}`, 'Rewards']}
+          />
+          <Bar dataKey="rewards" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      );
+    }
+
+    if (chartType === 'distribution') {
+      return (
+        <PieChart>
+          <Pie
+            data={validatorRewards.slice(0, 8)}
+            cx="50%"
+            cy="50%"
+            outerRadius={120}
+            innerRadius={60}
+            dataKey="rewards"
+            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+          >
+            {validatorRewards.slice(0, 8).map((entry, index) => (
+              <Cell key={`cell-${index}`} fill={entry.color} />
+            ))}
+          </Pie>
+          <Tooltip 
+            contentStyle={{ 
+              backgroundColor: 'rgba(0, 0, 0, 0.8)', 
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '8px',
+              color: 'white'
+            }}
+            formatter={(value: number) => [`${value.toLocaleString()}`, 'Rewards']}
+          />
+        </PieChart>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <div className="min-h-screen p-6">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -156,99 +260,7 @@ const RewardsAnalytics = () => {
           
           <div className="h-96">
             <ResponsiveContainer width="100%" height="100%">
-              {chartType === 'total' && (
-                <AreaChart data={filteredData}>
-                  <defs>
-                    <linearGradient id="rewardGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis 
-                    dataKey="epoch" 
-                    stroke="rgba(255,255,255,0.6)"
-                    fontSize={12}
-                  />
-                  <YAxis 
-                    stroke="rgba(255,255,255,0.6)"
-                    fontSize={12}
-                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(0, 0, 0, 0.8)', 
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '8px',
-                      color: 'white'
-                    }}
-                    formatter={(value: number) => [`${value.toLocaleString()}`, 'Total Rewards']}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="totalRewards" 
-                    stroke="#8b5cf6" 
-                    fill="url(#rewardGradient)"
-                    strokeWidth={2}
-                  />
-                </AreaChart>
-              )}
-
-              {chartType === 'individual' && (
-                <BarChart data={validatorRewards.slice(0, 10)}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis 
-                    dataKey="name" 
-                    stroke="rgba(255,255,255,0.6)"
-                    fontSize={10}
-                    angle={-45}
-                    textAnchor="end"
-                    height={80}
-                  />
-                  <YAxis 
-                    stroke="rgba(255,255,255,0.6)"
-                    fontSize={12}
-                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(0, 0, 0, 0.8)', 
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '8px',
-                      color: 'white'
-                    }}
-                    formatter={(value: number) => [`${value.toLocaleString()}`, 'Rewards']}
-                  />
-                  <Bar dataKey="rewards" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              )}
-
-              {chartType === 'distribution' && (
-                <PieChart>
-                  <Pie
-                    data={validatorRewards.slice(0, 8)}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={120}
-                    innerRadius={60}
-                    dataKey="rewards"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
-                  >
-                    {validatorRewards.slice(0, 8).map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(0, 0, 0, 0.8)', 
-                      border: '1px solid rgba(255, 255, 255, 0.1)',
-                      borderRadius: '8px',
-                      color: 'white'
-                    }}
-                    formatter={(value: number) => [`${value.toLocaleString()}`, 'Rewards']}
-                  />
-                </PieChart>
-              )}
+              {renderChart()}
             </ResponsiveContainer>
           </div>
         </Card>
