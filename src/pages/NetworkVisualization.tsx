@@ -1,11 +1,13 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ZoomIn, ZoomOut, RotateCcw, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { ZoomIn, ZoomOut, RotateCcw, Loader2, MapPin } from 'lucide-react';
 import { fetchValidators, Validator } from '../services/validatorApi';
+import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 
 interface Node {
   id: string;
@@ -25,6 +27,8 @@ interface Node {
 
 const NetworkVisualization = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
   const animationRef = useRef<number>();
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -33,6 +37,8 @@ const NetworkVisualization = () => {
   const [viewType, setViewType] = useState<'network' | 'geographic' | 'clusters'>('network');
   const [selectedValidator, setSelectedValidator] = useState<string | null>(null);
   const [hoveredValidator, setHoveredValidator] = useState<string | null>(null);
+  const [mapboxToken, setMapboxToken] = useState('');
+  const [showTokenInput, setShowTokenInput] = useState(false);
 
   const { data: validators = [], isLoading, error } = useQuery({
     queryKey: ['validators'],
@@ -46,19 +52,9 @@ const NetworkVisualization = () => {
       return validators.map((validator, index) => {
         let x, y;
         if (viewType === 'geographic') {
-          const regions = ['North America', 'Europe', 'Asia', 'Africa', 'South America', 'Australia'];
-          const randomRegion = regions[index % regions.length];
-          const regionCoords: { [key: string]: { x: number; y: number } } = {
-            'North America': { x: -300, y: -150 },
-            'Europe': { x: 0, y: -200 },
-            'Asia': { x: 300, y: -100 },
-            'Africa': { x: 50, y: 150 },
-            'South America': { x: -200, y: 250 },
-            'Australia': { x: 350, y: 200 },
-          };
-          const coords = regionCoords[randomRegion] || { x: 0, y: 0 };
-          x = coords.x + (Math.random() - 0.5) * 80;
-          y = coords.y + (Math.random() - 0.5) * 80;
+          // For geographic view, coordinates will be handled by Mapbox markers, so assign dummy values
+          x = 0;
+          y = 0;
         } else if (viewType === 'clusters') {
           const performanceGroup = Math.floor(validator.performanceScore / 20);
           const angle = (index / validators.length) * 2 * Math.PI;
@@ -100,6 +96,124 @@ const NetworkVisualization = () => {
   useEffect(() => {
     setNodes(generateNodes());
   }, [generateNodes]);
+
+  // Initialize Mapbox map for geographic view
+  useEffect(() => {
+    if (viewType === 'geographic' && mapboxToken && mapContainerRef.current && !mapRef.current) {
+      mapboxgl.accessToken = mapboxToken;
+      
+      mapRef.current = new mapboxgl.Map({
+        container: mapContainerRef.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: [0, 20],
+        zoom: 2,
+        projection: 'globe'
+      });
+
+      // Add atmosphere for 3D globe effect
+      mapRef.current.on('style.load', () => {
+        mapRef.current?.setFog({
+          color: 'rgb(20, 20, 40)',
+          'high-color': 'rgb(50, 50, 80)',
+          'horizon-blend': 0.1,
+        });
+      });
+
+      // Add navigation controls
+      mapRef.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    }
+
+    return () => {
+      if (mapRef.current && viewType !== 'geographic') {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [viewType, mapboxToken]);
+
+  // Add markers to map when nodes change
+  useEffect(() => {
+    if (mapRef.current && viewType === 'geographic' && nodes.length > 0) {
+      // Clear existing markers
+      const existingMarkers = document.querySelectorAll('.mapbox-marker');
+      existingMarkers.forEach(marker => marker.remove());
+
+      // Add new markers
+      nodes.forEach((node) => {
+        // Generate realistic coordinates based on regions
+        const regionCoords: { [key: string]: { lat: number; lng: number } } = {
+          'North America': { lat: 39.8283 + (Math.random() - 0.5) * 20, lng: -98.5795 + (Math.random() - 0.5) * 40 },
+          'Europe': { lat: 54.5260 + (Math.random() - 0.5) * 20, lng: 15.2551 + (Math.random() - 0.5) * 30 },
+          'Asia': { lat: 34.0479 + (Math.random() - 0.5) * 40, lng: 100.6197 + (Math.random() - 0.5) * 60 },
+          'Africa': { lat: -8.7832 + (Math.random() - 0.5) * 40, lng: 34.5085 + (Math.random() - 0.5) * 40 },
+          'South America': { lat: -14.2350 + (Math.random() - 0.5) * 30, lng: -51.9253 + (Math.random() - 0.5) * 40 },
+          'Australia': { lat: -25.2744 + (Math.random() - 0.5) * 20, lng: 133.7751 + (Math.random() - 0.5) * 30 },
+        };
+
+        const coords = regionCoords[node.region] || { lat: 0, lng: 0 };
+        const colors = getNodeColor(node);
+        
+        // Create custom marker element
+        const markerEl = document.createElement('div');
+        markerEl.className = 'mapbox-marker';
+        markerEl.style.cssText = `
+          width: ${node.size * 2}px;
+          height: ${node.size * 2}px;
+          background: radial-gradient(circle, ${colors.secondary}, ${colors.primary});
+          border: 2px solid ${selectedValidator === node.id ? '#ffffff' : colors.primary};
+          border-radius: 50%;
+          cursor: pointer;
+          box-shadow: 0 0 20px ${colors.primary}60;
+          animation: ${node.status === 'active' ? 'pulse 2s infinite' : 'none'};
+          position: relative;
+        `;
+
+        // Add performance ring
+        if (node.performance > 0) {
+          const ring = document.createElement('div');
+          ring.style.cssText = `
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            width: calc(100% + 6px);
+            height: calc(100% + 6px);
+            border: 2px solid ${colors.secondary};
+            border-radius: 50%;
+            border-top-color: transparent;
+            transform: rotate(${(node.performance / 100) * 360}deg);
+          `;
+          markerEl.appendChild(ring);
+        }
+
+        markerEl.addEventListener('click', () => {
+          setSelectedValidator(node.id);
+        });
+
+        markerEl.addEventListener('mouseenter', () => {
+          setHoveredValidator(node.id);
+        });
+
+        markerEl.addEventListener('mouseleave', () => {
+          setHoveredValidator(null);
+        });
+
+        // Create popup for detailed info
+        const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(`
+          <div style="color: white; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px;">
+            <h4 style="margin: 0 0 8px 0; color: ${colors.primary};">${node.name}</h4>
+            <p style="margin: 0; font-size: 12px;">Performance: ${node.performance.toFixed(1)}%</p>
+            <p style="margin: 0; font-size: 12px;">Stake: ${(node.stake / 1000000).toFixed(1)}M</p>
+            <p style="margin: 0; font-size: 12px;">Region: ${node.region}</p>
+          </div>
+        `);
+
+        new mapboxgl.Marker(markerEl)
+          .setLngLat([coords.lng, coords.lat])
+          .setPopup(popup)
+          .addTo(mapRef.current!);
+      });
+    }
+  }, [nodes, viewType, selectedValidator]);
 
   const getNodeColor = (node: Node) => {
     if (node.status === 'slashed') return { primary: '#ef4444', secondary: '#fca5a5' };
@@ -378,6 +492,38 @@ const NetworkVisualization = () => {
           <p className="text-xl text-gray-300">Interactive view of validator network topology</p>
         </div>
 
+        {/* Mapbox Token Input */}
+        {viewType === 'geographic' && !mapboxToken && (
+          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-purple-400" />
+                <h3 className="text-white font-medium">Mapbox Configuration Required</h3>
+              </div>
+              <p className="text-gray-400 text-sm">
+                To display the geographic map view, please enter your Mapbox public token. 
+                You can get one for free at <a href="https://mapbox.com/" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300">mapbox.com</a>
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="Enter your Mapbox public token (pk.)"
+                  value={mapboxToken}
+                  onChange={(e) => setMapboxToken(e.target.value)}
+                  className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+                />
+                <Button
+                  onClick={() => setMapboxToken(mapboxToken)}
+                  disabled={!mapboxToken.startsWith('pk.')}
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                >
+                  Apply
+                </Button>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* Controls */}
         <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
           <div className="flex flex-col md:flex-row gap-6 justify-between items-center">
@@ -402,51 +548,61 @@ const NetworkVisualization = () => {
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={zoomIn}
-                className="border-white/20 text-gray-300 hover:bg-white/10"
-                aria-label="Zoom in"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={zoomOut}
-                className="border-white/20 text-gray-300 hover:bg-white/10"
-                aria-label="Zoom out"
-              >
-                <ZoomOut className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={resetView}
-                className="border-white/20 text-gray-300 hover:bg-white/10"
-                aria-label="Reset view"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </Button>
-            </div>
+            {viewType !== 'geographic' && (
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={zoomIn}
+                  className="border-white/20 text-gray-300 hover:bg-white/10"
+                  aria-label="Zoom in"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={zoomOut}
+                  className="border-white/20 text-gray-300 hover:bg-white/10"
+                  aria-label="Zoom out"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={resetView}
+                  className="border-white/20 text-gray-300 hover:bg-white/10"
+                  aria-label="Reset view"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </Card>
 
-        {/* Network Canvas */}
+        {/* Network Canvas / Map */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           <Card className="lg:col-span-3 p-6 bg-white/5 backdrop-blur-lg border-white/10">
-            <canvas
-              ref={canvasRef}
-              className="w-full h-96 cursor-grab active:cursor-grabbing border border-white/10 rounded-lg bg-gradient-to-br from-slate-900/50 to-purple-900/50"
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-              onClick={handleCanvasClick}
-              aria-label="Network visualization canvas"
-            />
+            {viewType === 'geographic' && mapboxToken ? (
+              <div 
+                ref={mapContainerRef}
+                className="w-full h-96 rounded-lg border border-white/10"
+                style={{ background: '#0f0f23' }}
+              />
+            ) : (
+              <canvas
+                ref={canvasRef}
+                className="w-full h-96 cursor-grab active:cursor-grabbing border border-white/10 rounded-lg bg-gradient-to-br from-slate-900/50 to-purple-900/50"
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+                onClick={handleCanvasClick}
+                aria-label="Network visualization canvas"
+              />
+            )}
 
             {/* Enhanced Legend */}
             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
@@ -511,7 +667,12 @@ const NetworkVisualization = () => {
                 </Badge>
               </div>
             ) : (
-              <p className="text-gray-400">Click on a node to view details</p>
+              <p className="text-gray-400">
+                {viewType === 'geographic' 
+                  ? 'Click on a marker to view details' 
+                  : 'Click on a node to view details'
+                }
+              </p>
             )}
           </Card>
         </div>
@@ -552,6 +713,13 @@ const NetworkVisualization = () => {
           </Card>
         </div>
       </div>
+
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.1); opacity: 0.8; }
+        }
+      `}</style>
     </div>
   );
 };
