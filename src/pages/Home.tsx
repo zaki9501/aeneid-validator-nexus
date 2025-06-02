@@ -3,22 +3,34 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { TrendingUp, Users, Award, Activity } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { mockNetworkStats, mockValidators, mockRewardHistory } from '../data/mockData';
+import { mockValidators, mockRewardHistory } from '../data/mockData';
+import { fetchNetworkStats, NetworkStats } from '../services/networkApi';
 
 const Home = () => {
-  const [stats, setStats] = useState(mockNetworkStats);
+  const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
   const [isLive, setIsLive] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Simulate live data updates
+  // Fetch network stats on mount and then periodically
   useEffect(() => {
-    const interval = setInterval(() => {
-      setStats(prev => ({
-        ...prev,
-        networkUptime: Math.max(97, Math.min(99.9, prev.networkUptime + (Math.random() - 0.5) * 0.1)),
-        avgPerformanceScore: Math.max(90, Math.min(99, prev.avgPerformanceScore + (Math.random() - 0.5) * 0.2)),
-      }));
-    }, 15000);
+    const loadNetworkStats = async () => {
+      try {
+        setIsLoading(true);
+        const stats = await fetchNetworkStats();
+        setNetworkStats(stats);
+        setIsLive(true);
+      } catch (error) {
+        console.error('Failed to load network stats:', error);
+        setIsLive(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
+    loadNetworkStats();
+
+    // Update every 30 seconds
+    const interval = setInterval(loadNetworkStats, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -26,12 +38,30 @@ const Home = () => {
     .sort((a, b) => b.performanceScore - a.performanceScore)
     .slice(0, 5);
 
-  const statusData = [
-    { name: 'Active', value: stats.activeValidators, color: '#8b5cf6' },
-    { name: 'Inactive', value: stats.totalValidators - stats.activeValidators, color: '#64748b' },
-  ];
+  const statusData = networkStats ? [
+    { name: 'Active', value: networkStats.validators.active, color: '#8b5cf6' },
+    { name: 'Inactive', value: networkStats.validators.total - networkStats.validators.active, color: '#64748b' },
+  ] : [];
 
   const recentRewards = mockRewardHistory.slice(-7);
+
+  // Calculate estimated total rewards based on network stats
+  const estimatedTotalRewards = networkStats ? networkStats.validators.total * 15000 : 2450000;
+
+  // Calculate network uptime and performance (mock calculation based on block time)
+  const networkUptime = networkStats ? Math.min(99.9, 96 + (4 - networkStats.blockTime.diffTime)) : 98.4;
+  const avgPerformanceScore = networkStats ? Math.min(99, 92 + (4 - networkStats.blockTime.diffTime) * 2) : 95.8;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-8 h-8 border-4 border-purple-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-white">Loading network statistics...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen p-6">
@@ -49,8 +79,15 @@ const Home = () => {
           </p>
           <div className="flex items-center justify-center space-x-2">
             <div className={`w-3 h-3 rounded-full ${isLive ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
-            <span className="text-sm text-gray-400">Live Data • Updates every 15s</span>
+            <span className="text-sm text-gray-400">
+              {isLive ? 'Live Data • Updates every 30s' : 'Offline • Using cached data'}
+            </span>
           </div>
+          {networkStats && (
+            <div className="text-sm text-gray-400">
+              Network: {networkStats.network} • Latest Block: {networkStats.latestBlock.height.toLocaleString()}
+            </div>
+          )}
         </div>
 
         {/* Network Stats */}
@@ -62,7 +99,9 @@ const Home = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-400">Total Validators</p>
-                <p className="text-2xl font-bold text-white">{stats.totalValidators}</p>
+                <p className="text-2xl font-bold text-white">
+                  {networkStats ? networkStats.validators.total : '---'}
+                </p>
               </div>
             </div>
           </Card>
@@ -74,7 +113,9 @@ const Home = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-400">Active Validators</p>
-                <p className="text-2xl font-bold text-white">{stats.activeValidators}</p>
+                <p className="text-2xl font-bold text-white">
+                  {networkStats ? networkStats.validators.active : '---'}
+                </p>
               </div>
             </div>
           </Card>
@@ -85,8 +126,10 @@ const Home = () => {
                 <TrendingUp className="h-6 w-6 text-blue-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-400">Current Epoch</p>
-                <p className="text-2xl font-bold text-white">{stats.currentEpoch}</p>
+                <p className="text-sm text-gray-400">Current Block</p>
+                <p className="text-2xl font-bold text-white">
+                  {networkStats ? networkStats.latestBlock.height.toLocaleString() : '---'}
+                </p>
               </div>
             </div>
           </Card>
@@ -97,8 +140,10 @@ const Home = () => {
                 <Award className="h-6 w-6 text-yellow-400" />
               </div>
               <div>
-                <p className="text-sm text-gray-400">Total Rewards</p>
-                <p className="text-2xl font-bold text-white">{(stats.totalRewards / 1000).toFixed(0)}K</p>
+                <p className="text-sm text-gray-400">Est. Total Rewards</p>
+                <p className="text-2xl font-bold text-white">
+                  {(estimatedTotalRewards / 1000).toFixed(0)}K
+                </p>
               </div>
             </div>
           </Card>
@@ -138,12 +183,18 @@ const Home = () => {
             <div className="mt-4 space-y-2">
               <div className="flex justify-between items-center">
                 <span className="text-gray-400">Network Uptime</span>
-                <span className="text-white font-semibold">{stats.networkUptime.toFixed(1)}%</span>
+                <span className="text-white font-semibold">{networkUptime.toFixed(1)}%</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-400">Avg Performance</span>
-                <span className="text-white font-semibold">{stats.avgPerformanceScore.toFixed(1)}</span>
+                <span className="text-white font-semibold">{avgPerformanceScore.toFixed(1)}</span>
               </div>
+              {networkStats && (
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">Block Time</span>
+                  <span className="text-white font-semibold">{networkStats.blockTime.diffTime.toFixed(2)}s</span>
+                </div>
+              )}
             </div>
           </Card>
 
