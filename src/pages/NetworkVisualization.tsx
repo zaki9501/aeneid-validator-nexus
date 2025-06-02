@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
@@ -482,245 +483,249 @@ const NetworkVisualization = () => {
   }
 
   return (
-    <div className="min-h-screen p-6 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Network Visualization
-          </h1>
-          <p className="text-xl text-gray-300">Interactive view of validator network topology</p>
-        </div>
-
-        {/* Mapbox Token Input */}
-        {viewType === 'geographic' && !mapboxToken && (
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-purple-400" />
-                <h3 className="text-white font-medium">Mapbox Configuration Required</h3>
-              </div>
-              <p className="text-gray-400 text-sm">
-                To display the geographic map view, please enter your Mapbox public token. 
-                You can get one for free at <a href="https://mapbox.com/" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300">mapbox.com</a>
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="Enter your Mapbox public token (pk.)"
-                  value={mapboxToken}
-                  onChange={(e) => setMapboxToken(e.target.value)}
-                  className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-gray-400"
-                />
-                <Button
-                  onClick={() => setMapboxToken(mapboxToken)}
-                  disabled={!mapboxToken.startsWith('pk.')}
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                >
-                  Apply
-                </Button>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {/* Controls */}
-        <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
-          <div className="flex flex-col md:flex-row gap-6 justify-between items-center">
-            <div>
-              <h3 className="text-white font-medium mb-3">View Type</h3>
-              <div className="flex gap-2">
-                {(['network', 'geographic', 'clusters'] as const).map((type) => (
-                  <Button
-                    key={type}
-                    variant={viewType === type ? 'default' : 'outline'}
-                    onClick={() => setViewType(type)}
-                    className={
-                      viewType === type
-                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
-                        : 'border-white/20 text-gray-300 hover:bg-white/10'
-                    }
-                    aria-pressed={viewType === type}
-                  >
-                    {type.charAt(0).toUpperCase() + type.slice(1)}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {viewType !== 'geographic' && (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={zoomIn}
-                  className="border-white/20 text-gray-300 hover:bg-white/10"
-                  aria-label="Zoom in"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={zoomOut}
-                  className="border-white/20 text-gray-300 hover:bg-white/10"
-                  aria-label="Zoom out"
-                >
-                  <ZoomOut className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={resetView}
-                  className="border-white/20 text-gray-300 hover:bg-white/10"
-                  aria-label="Reset view"
-                >
-                  <RotateCcw className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-        </Card>
-
-        {/* Network Canvas / Map */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          <Card className="lg:col-span-3 p-6 bg-white/5 backdrop-blur-lg border-white/10">
-            {viewType === 'geographic' && mapboxToken ? (
-              <div 
-                ref={mapContainerRef}
-                className="w-full h-96 rounded-lg border border-white/10"
-                style={{ background: '#0f0f23' }}
-              />
-            ) : (
-              <canvas
-                ref={canvasRef}
-                className="w-full h-96 cursor-grab active:cursor-grabbing border border-white/10 rounded-lg bg-gradient-to-br from-slate-900/50 to-purple-900/50"
-                onMouseDown={handleMouseDown}
-                onMouseMove={handleMouseMove}
-                onMouseUp={handleMouseUp}
-                onMouseLeave={handleMouseUp}
-                onClick={handleCanvasClick}
-                aria-label="Network visualization canvas"
-              />
-            )}
-
-            {/* Enhanced Legend */}
-            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-green-400 to-emerald-400"></div>
-                <span className="text-xs text-gray-400">Excellent (95%+)</span>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-blue-400 to-cyan-400"></div>
-                <span className="text-xs text-gray-400">Good (90-95%)</span>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-purple-400 to-pink-400"></div>
-                <span className="text-xs text-gray-400">Fair (85-90%)</span>
-              </div>
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400"></div>
-                <span className="text-xs text-gray-400">Poor (Less than 85%)</span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Enhanced Node Details */}
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
-            <h3 className="text-xl font-semibold text-white mb-4">Node Details</h3>
-            {selectedValidatorData ? (
-              <div className="space-y-4">
-                <div>
-                  <h4 className="text-white font-medium">{selectedValidatorData.name}</h4>
-                  <p className="text-xs text-gray-400 font-mono break-all">
-                    {selectedValidatorData.address}
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Performance</span>
-                    <span className="text-white font-medium">{selectedValidatorData.performanceScore.toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Uptime</span>
-                    <span className="text-white font-medium">{(selectedValidatorData.uptime * 100).toFixed(1)}%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Stake</span>
-                    <span className="text-white font-medium">{(selectedValidatorData.stake / 1000000).toFixed(1)}M</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-400">Commission</span>
-                    <span className="text-white font-medium">{selectedValidatorData.commission.toFixed(1)}%</span>
-                  </div>
-                </div>
-                <Badge
-                  className={
-                    selectedValidatorData.status === 'active'
-                      ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                      : selectedValidatorData.status === 'slashed' 
-                        ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                        : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-                  }
-                >
-                  {selectedValidatorData.status}
-                </Badge>
-              </div>
-            ) : (
-              <p className="text-gray-400">
-                {viewType === 'geographic' 
-                  ? 'Click on a marker to view details' 
-                  : 'Click on a node to view details'
-                }
-              </p>
-            )}
-          </Card>
-        </div>
-
-        {/* Enhanced Network Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border-purple-500/20">
-            <div className="text-center">
-              <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                {nodes.length}
-              </p>
-              <p className="text-gray-400">Total Nodes</p>
-            </div>
-          </Card>
-          <Card className="p-6 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-lg border-green-500/20">
-            <div className="text-center">
-              <p className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-                {nodes.filter((n) => n.status === 'active').length}
-              </p>
-              <p className="text-gray-400">Active Nodes</p>
-            </div>
-          </Card>
-          <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 backdrop-blur-lg border-blue-500/20">
-            <div className="text-center">
-              <p className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                {(nodes.reduce((sum, n) => sum + n.connections, 0) / 2).toFixed(0)}
-              </p>
-              <p className="text-gray-400">Connections</p>
-            </div>
-          </Card>
-          <Card className="p-6 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 backdrop-blur-lg border-yellow-500/20">
-            <div className="text-center">
-              <p className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
-                {nodes.length > 0 ? (nodes.reduce((sum, n) => sum + n.performance, 0) / nodes.length).toFixed(1) : '0'}
-              </p>
-              <p className="text-gray-400">Avg Performance</p>
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      <style jsx>{`
+    <>
+      <style>{`
         @keyframes pulse {
           0%, 100% { transform: scale(1); opacity: 1; }
           50% { transform: scale(1.1); opacity: 0.8; }
         }
+        .mapbox-marker {
+          animation: pulse 2s infinite;
+        }
       `}</style>
-    </div>
+      <div className="min-h-screen p-6 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+        <div className="max-w-7xl mx-auto space-y-8">
+          {/* Header */}
+          <div className="text-center space-y-4">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+              Network Visualization
+            </h1>
+            <p className="text-xl text-gray-300">Interactive view of validator network topology</p>
+          </div>
+
+          {/* Mapbox Token Input */}
+          {viewType === 'geographic' && !mapboxToken && (
+            <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-purple-400" />
+                  <h3 className="text-white font-medium">Mapbox Configuration Required</h3>
+                </div>
+                <p className="text-gray-400 text-sm">
+                  To display the geographic map view, please enter your Mapbox public token. 
+                  You can get one for free at <a href="https://mapbox.com/" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300">mapbox.com</a>
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    type="text"
+                    placeholder="Enter your Mapbox public token (pk.)"
+                    value={mapboxToken}
+                    onChange={(e) => setMapboxToken(e.target.value)}
+                    className="flex-1 bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+                  />
+                  <Button
+                    onClick={() => setMapboxToken(mapboxToken)}
+                    disabled={!mapboxToken.startsWith('pk.')}
+                    className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                  >
+                    Apply
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Controls */}
+          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+            <div className="flex flex-col md:flex-row gap-6 justify-between items-center">
+              <div>
+                <h3 className="text-white font-medium mb-3">View Type</h3>
+                <div className="flex gap-2">
+                  {(['network', 'geographic', 'clusters'] as const).map((type) => (
+                    <Button
+                      key={type}
+                      variant={viewType === type ? 'default' : 'outline'}
+                      onClick={() => setViewType(type)}
+                      className={
+                        viewType === type
+                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
+                          : 'border-white/20 text-gray-300 hover:bg-white/10'
+                      }
+                      aria-pressed={viewType === type}
+                    >
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {viewType !== 'geographic' && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={zoomIn}
+                    className="border-white/20 text-gray-300 hover:bg-white/10"
+                    aria-label="Zoom in"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={zoomOut}
+                    className="border-white/20 text-gray-300 hover:bg-white/10"
+                    aria-label="Zoom out"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={resetView}
+                    className="border-white/20 text-gray-300 hover:bg-white/10"
+                    aria-label="Reset view"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Network Canvas / Map */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            <Card className="lg:col-span-3 p-6 bg-white/5 backdrop-blur-lg border-white/10">
+              {viewType === 'geographic' && mapboxToken ? (
+                <div 
+                  ref={mapContainerRef}
+                  className="w-full h-96 rounded-lg border border-white/10"
+                  style={{ background: '#0f0f23' }}
+                />
+              ) : (
+                <canvas
+                  ref={canvasRef}
+                  className="w-full h-96 cursor-grab active:cursor-grabbing border border-white/10 rounded-lg bg-gradient-to-br from-slate-900/50 to-purple-900/50"
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                  onClick={handleCanvasClick}
+                  aria-label="Network visualization canvas"
+                />
+              )}
+
+              {/* Enhanced Legend */}
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-green-400 to-emerald-400"></div>
+                  <span className="text-xs text-gray-400">Excellent (95%+)</span>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-blue-400 to-cyan-400"></div>
+                  <span className="text-xs text-gray-400">Good (90-95%)</span>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-purple-400 to-pink-400"></div>
+                  <span className="text-xs text-gray-400">Fair (85-90%)</span>
+                </div>
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400"></div>
+                  <span className="text-xs text-gray-400">Poor (Less than 85%)</span>
+                </div>
+              </div>
+            </Card>
+
+            {/* Enhanced Node Details */}
+            <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+              <h3 className="text-xl font-semibold text-white mb-4">Node Details</h3>
+              {selectedValidatorData ? (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-white font-medium">{selectedValidatorData.name}</h4>
+                    <p className="text-xs text-gray-400 font-mono break-all">
+                      {selectedValidatorData.address}
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Performance</span>
+                      <span className="text-white font-medium">{selectedValidatorData.performanceScore.toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Uptime</span>
+                      <span className="text-white font-medium">{(selectedValidatorData.uptime * 100).toFixed(1)}%</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Stake</span>
+                      <span className="text-white font-medium">{(selectedValidatorData.stake / 1000000).toFixed(1)}M</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Commission</span>
+                      <span className="text-white font-medium">{selectedValidatorData.commission.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                  <Badge
+                    className={
+                      selectedValidatorData.status === 'active'
+                        ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                        : selectedValidatorData.status === 'slashed' 
+                          ? 'bg-red-500/20 text-red-400 border-red-500/30'
+                          : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                    }
+                  >
+                    {selectedValidatorData.status}
+                  </Badge>
+                </div>
+              ) : (
+                <p className="text-gray-400">
+                  {viewType === 'geographic' 
+                    ? 'Click on a marker to view details' 
+                    : 'Click on a node to view details'
+                  }
+                </p>
+              )}
+            </Card>
+          </div>
+
+          {/* Enhanced Network Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <Card className="p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border-purple-500/20">
+              <div className="text-center">
+                <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                  {nodes.length}
+                </p>
+                <p className="text-gray-400">Total Nodes</p>
+              </div>
+            </Card>
+            <Card className="p-6 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-lg border-green-500/20">
+              <div className="text-center">
+                <p className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                  {nodes.filter((n) => n.status === 'active').length}
+                </p>
+                <p className="text-gray-400">Active Nodes</p>
+              </div>
+            </Card>
+            <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 backdrop-blur-lg border-blue-500/20">
+              <div className="text-center">
+                <p className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                  {(nodes.reduce((sum, n) => sum + n.connections, 0) / 2).toFixed(0)}
+                </p>
+                <p className="text-gray-400">Connections</p>
+              </div>
+            </Card>
+            <Card className="p-6 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 backdrop-blur-lg border-yellow-500/20">
+              <div className="text-center">
+                <p className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
+                  {nodes.length > 0 ? (nodes.reduce((sum, n) => sum + n.performance, 0) / nodes.length).toFixed(1) : '0'}
+                </p>
+                <p className="text-gray-400">Avg Performance</p>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
 
