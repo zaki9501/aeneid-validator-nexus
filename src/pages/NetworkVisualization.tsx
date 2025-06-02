@@ -20,16 +20,19 @@ interface Node {
   uptime: number;
   stake: number;
   commission: number;
+  pulsePhase: number;
 }
 
 const NetworkVisualization = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number>();
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
   const [viewType, setViewType] = useState<'network' | 'geographic' | 'clusters'>('network');
   const [selectedValidator, setSelectedValidator] = useState<string | null>(null);
+  const [hoveredValidator, setHoveredValidator] = useState<string | null>(null);
 
   const { data: validators = [], isLoading, error } = useQuery({
     queryKey: ['validators'],
@@ -43,33 +46,34 @@ const NetworkVisualization = () => {
       return validators.map((validator, index) => {
         let x, y;
         if (viewType === 'geographic') {
-          // Since API doesn't provide region, distribute randomly
           const regions = ['North America', 'Europe', 'Asia', 'Africa', 'South America', 'Australia'];
           const randomRegion = regions[index % regions.length];
           const regionCoords: { [key: string]: { x: number; y: number } } = {
-            'North America': { x: -200, y: 0 },
-            'Europe': { x: 0, y: -100 },
-            'Asia': { x: 200, y: 0 },
-            'Africa': { x: 0, y: 100 },
-            'South America': { x: -100, y: 200 },
-            'Australia': { x: 200, y: 200 },
+            'North America': { x: -300, y: -150 },
+            'Europe': { x: 0, y: -200 },
+            'Asia': { x: 300, y: -100 },
+            'Africa': { x: 50, y: 150 },
+            'South America': { x: -200, y: 250 },
+            'Australia': { x: 350, y: 200 },
           };
           const coords = regionCoords[randomRegion] || { x: 0, y: 0 };
-          x = coords.x + (Math.random() - 0.5) * 50;
-          y = coords.y + (Math.random() - 0.5) * 50;
+          x = coords.x + (Math.random() - 0.5) * 80;
+          y = coords.y + (Math.random() - 0.5) * 80;
         } else if (viewType === 'clusters') {
-          // Cluster by performance score
-          const performanceGroup = Math.floor(validator.performanceScore / 25);
+          const performanceGroup = Math.floor(validator.performanceScore / 20);
           const angle = (index / validators.length) * 2 * Math.PI;
-          const radius = 100 + performanceGroup * 50;
+          const radius = 120 + performanceGroup * 60;
           x = Math.cos(angle) * radius;
           y = Math.sin(angle) * radius;
         } else {
-          // Circular layout for network
-          const angle = (index / validators.length) * 2 * Math.PI;
-          const radius = 200 + Math.random() * 100;
-          x = Math.cos(angle) * radius;
-          y = Math.sin(angle) * radius;
+          // Enhanced circular layout for network
+          const layers = Math.ceil(Math.sqrt(validators.length));
+          const layer = Math.floor(index / layers);
+          const posInLayer = index % layers;
+          const angle = (posInLayer / layers) * 2 * Math.PI + (layer * 0.5);
+          const radius = 150 + layer * 80;
+          x = Math.cos(angle) * radius + (Math.random() - 0.5) * 30;
+          y = Math.sin(angle) * radius + (Math.random() - 0.5) * 30;
         }
         
         return {
@@ -77,14 +81,15 @@ const NetworkVisualization = () => {
           name: validator.name,
           x,
           y,
-          size: Math.max(5, Math.min(20, (validator.stake / 10000000) * 15)), // Scale based on stake
+          size: Math.max(8, Math.min(25, (validator.stake / 5000000) * 12)),
           performance: validator.performanceScore,
           status: validator.status,
-          connections: Math.floor(Math.random() * 5) + 2,
+          connections: Math.floor(Math.random() * 6) + 3,
           region: validator.region || 'Unknown',
           uptime: validator.uptime,
           stake: validator.stake,
           commission: validator.commission,
+          pulsePhase: Math.random() * Math.PI * 2,
         };
       });
     };
@@ -92,37 +97,64 @@ const NetworkVisualization = () => {
 
   const [nodes, setNodes] = useState<Node[]>([]);
 
-  // Update nodes when validators or viewType changes
   useEffect(() => {
     setNodes(generateNodes());
   }, [generateNodes]);
 
-  const drawNetwork = () => {
+  const getNodeColor = (node: Node) => {
+    if (node.status === 'slashed') return { primary: '#ef4444', secondary: '#fca5a5' };
+    if (node.performance > 95) return { primary: '#10b981', secondary: '#6ee7b7' };
+    if (node.performance > 90) return { primary: '#3b82f6', secondary: '#93c5fd' };
+    if (node.performance > 85) return { primary: '#8b5cf6', secondary: '#c4b5fd' };
+    return { primary: '#f59e0b', secondary: '#fcd34d' };
+  };
+
+  const drawNetwork = (time: number = 0) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Clear canvas with dark background
+    ctx.fillStyle = '#0f0f23';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Save context
+    // Add subtle grid pattern
+    ctx.strokeStyle = 'rgba(139, 92, 246, 0.05)';
+    ctx.lineWidth = 1;
+    const gridSize = 50 * zoom;
+    for (let x = (offset.x % gridSize); x < canvas.width; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+    for (let y = (offset.y % gridSize); y < canvas.height; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+
     ctx.save();
-
-    // Apply transformations
     ctx.translate(canvas.width / 2 + offset.x, canvas.height / 2 + offset.y);
     ctx.scale(zoom, zoom);
 
-    // Draw connections
+    // Draw connections with enhanced styling
     if (viewType === 'network') {
-      ctx.strokeStyle = 'rgba(139, 92, 246, 0.2)';
-      ctx.lineWidth = 1;
-
       nodes.forEach((node, i) => {
-        for (let j = 0; j < node.connections && j < nodes.length; j++) {
+        for (let j = 0; j < Math.min(node.connections, 4); j++) {
           const targetIndex = (i + j + 1) % nodes.length;
           const target = nodes[targetIndex];
-
+          
+          const gradient = ctx.createLinearGradient(node.x, node.y, target.x, target.y);
+          const colors = getNodeColor(node);
+          gradient.addColorStop(0, colors.primary + '40');
+          gradient.addColorStop(0.5, colors.primary + '20');
+          gradient.addColorStop(1, getNodeColor(target).primary + '40');
+          
+          ctx.strokeStyle = gradient;
+          ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.moveTo(node.x, node.y);
           ctx.lineTo(target.x, target.y);
@@ -131,42 +163,103 @@ const NetworkVisualization = () => {
       });
     }
 
-    // Draw nodes
+    // Draw nodes with enhanced styling
     nodes.forEach((node) => {
-      // Node color based on performance
-      let color = '#ef4444'; // Poor
-      if (node.performance > 95) color = '#10b981'; // Excellent
-      else if (node.performance > 90) color = '#f59e0b'; // Good
-      else if (node.performance > 85) color = '#8b5cf6'; // Fair
+      const colors = getNodeColor(node);
+      const isSelected = selectedValidator === node.id;
+      const isHovered = hoveredValidator === node.id;
+      
+      // Animated pulse for active nodes
+      if (node.status === 'active') {
+        const pulseIntensity = Math.sin(time * 0.003 + node.pulsePhase) * 0.3 + 0.7;
+        const pulseSize = node.size + (Math.sin(time * 0.005 + node.pulsePhase) * 3);
+        
+        // Outer glow
+        const glowGradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, pulseSize + 15);
+        glowGradient.addColorStop(0, colors.primary + Math.floor(pulseIntensity * 40).toString(16).padStart(2, '0'));
+        glowGradient.addColorStop(0.7, colors.primary + '20');
+        glowGradient.addColorStop(1, colors.primary + '00');
+        
+        ctx.fillStyle = glowGradient;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, pulseSize + 15, 0, 2 * Math.PI);
+        ctx.fill();
+      }
 
-      // Draw node
+      // Main node with gradient
+      const nodeGradient = ctx.createRadialGradient(
+        node.x - node.size * 0.3, 
+        node.y - node.size * 0.3, 
+        0, 
+        node.x, 
+        node.y, 
+        node.size
+      );
+      nodeGradient.addColorStop(0, colors.secondary);
+      nodeGradient.addColorStop(0.7, colors.primary);
+      nodeGradient.addColorStop(1, colors.primary + 'cc');
+
+      ctx.fillStyle = nodeGradient;
       ctx.beginPath();
       ctx.arc(node.x, node.y, node.size, 0, 2 * Math.PI);
-      ctx.fillStyle = color;
       ctx.fill();
 
-      // Draw border for selected node
-      if (selectedValidator === node.id) {
-        ctx.strokeStyle = '#ffffff';
+      // Node border
+      ctx.strokeStyle = isSelected || isHovered ? '#ffffff' : colors.primary;
+      ctx.lineWidth = isSelected ? 4 : isHovered ? 3 : 2;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.size, 0, 2 * Math.PI);
+      ctx.stroke();
+
+      // Performance indicator ring
+      if (node.performance > 0) {
+        const ringRadius = node.size + 5;
+        const performanceAngle = (node.performance / 100) * 2 * Math.PI;
+        
+        ctx.strokeStyle = colors.secondary;
         ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, ringRadius, -Math.PI / 2, -Math.PI / 2 + performanceAngle);
         ctx.stroke();
       }
 
-      // Draw pulse effect for active validators
-      if (node.status === 'active') {
+      // Status indicator
+      if (node.status === 'slashed') {
+        ctx.fillStyle = '#ef4444';
         ctx.beginPath();
-        ctx.arc(node.x, node.y, node.size + 5, 0, 2 * Math.PI);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.3;
-        ctx.stroke();
-        ctx.globalAlpha = 1;
+        ctx.arc(node.x + node.size * 0.6, node.y - node.size * 0.6, 4, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+
+      // Node label for larger nodes or selected/hovered
+      if (node.size > 15 || isSelected || isHovered) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+          node.name.length > 10 ? node.name.substring(0, 10) + '...' : node.name,
+          node.x,
+          node.y + node.size + 15
+        );
       }
     });
 
-    // Restore context
     ctx.restore();
   };
+
+  const animate = (time: number) => {
+    drawNetwork(time);
+    animationRef.current = requestAnimationFrame(animate);
+  };
+
+  useEffect(() => {
+    animationRef.current = requestAnimationFrame(animate);
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [zoom, offset, selectedValidator, hoveredValidator, viewType, nodes]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
@@ -174,19 +267,30 @@ const NetworkVisualization = () => {
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
+    if (!canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left - canvas.width / 2 - offset.x) / zoom;
+    const y = (e.clientY - rect.top - canvas.height / 2 - offset.y) / zoom;
+
+    // Check for hovered node
+    const hoveredNode = nodes.find((node) => {
+      const distance = Math.sqrt((x - node.x) ** 2 + (y - node.y) ** 2);
+      return distance <= node.size + 5;
+    });
+
+    setHoveredValidator(hoveredNode ? hoveredNode.id : null);
+
     if (isDragging) {
       const deltaX = e.clientX - lastMousePos.x;
       const deltaY = e.clientY - lastMousePos.y;
       setOffset((prev) => {
         const newOffset = { x: prev.x + deltaX, y: prev.y + deltaY };
-        const canvas = canvasRef.current;
-        if (canvas) {
-          return {
-            x: Math.max(-canvas.width / 2, Math.min(canvas.width / 2, newOffset.x)),
-            y: Math.max(-canvas.height / 2, Math.min(canvas.height / 2, newOffset.y)),
-          };
-        }
-        return newOffset;
+        return {
+          x: Math.max(-canvas.width, Math.min(canvas.width, newOffset.x)),
+          y: Math.max(-canvas.height, Math.min(canvas.height, newOffset.y)),
+        };
       });
       setLastMousePos({ x: e.clientX, y: e.clientY });
     }
@@ -206,7 +310,7 @@ const NetworkVisualization = () => {
 
     const clickedNode = nodes.find((node) => {
       const distance = Math.sqrt((x - node.x) ** 2 + (y - node.y) ** 2);
-      return distance <= node.size;
+      return distance <= node.size + 5;
     });
 
     setSelectedValidator(clickedNode ? clickedNode.id : null);
@@ -216,14 +320,11 @@ const NetworkVisualization = () => {
     setZoom(1);
     setOffset({ x: 0, y: 0 });
     setSelectedValidator(null);
+    setHoveredValidator(null);
   };
 
   const zoomIn = () => setZoom((prev) => Math.min(prev * 1.2, 3));
   const zoomOut = () => setZoom((prev) => Math.max(prev / 1.2, 0.3));
-
-  useEffect(() => {
-    drawNetwork();
-  }, [zoom, offset, selectedValidator, viewType, nodes]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -231,7 +332,6 @@ const NetworkVisualization = () => {
       if (canvas) {
         canvas.width = canvas.offsetWidth;
         canvas.height = canvas.offsetHeight;
-        drawNetwork();
       }
     };
 
@@ -246,7 +346,7 @@ const NetworkVisualization = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen p-6 flex items-center justify-center">
+      <div className="min-h-screen p-6 flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
         <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
           <Loader2 className="w-8 h-8 animate-spin text-purple-400 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-4">Loading Network</h2>
@@ -258,7 +358,7 @@ const NetworkVisualization = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen p-6 flex items-center justify-center">
+      <div className="min-h-screen p-6 flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
         <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
           <h2 className="text-2xl font-bold text-white mb-4">Error Loading Network</h2>
           <p className="text-gray-400">Failed to fetch network data. Please try again later.</p>
@@ -268,11 +368,13 @@ const NetworkVisualization = () => {
   }
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen p-6 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold text-white">Network Visualization</h1>
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            Network Visualization
+          </h1>
           <p className="text-xl text-gray-300">Interactive view of validator network topology</p>
         </div>
 
@@ -289,7 +391,7 @@ const NetworkVisualization = () => {
                     onClick={() => setViewType(type)}
                     className={
                       viewType === type
-                        ? 'bg-purple-600 hover:bg-purple-700'
+                        ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
                         : 'border-white/20 text-gray-300 hover:bg-white/10'
                     }
                     aria-pressed={viewType === type}
@@ -337,7 +439,7 @@ const NetworkVisualization = () => {
           <Card className="lg:col-span-3 p-6 bg-white/5 backdrop-blur-lg border-white/10">
             <canvas
               ref={canvasRef}
-              className="w-full h-96 cursor-grab active:cursor-grabbing border border-white/10 rounded-lg bg-black/20"
+              className="w-full h-96 cursor-grab active:cursor-grabbing border border-white/10 rounded-lg bg-gradient-to-br from-slate-900/50 to-purple-900/50"
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
@@ -346,28 +448,28 @@ const NetworkVisualization = () => {
               aria-label="Network visualization canvas"
             />
 
-            {/* Legend */}
-            <div className="mt-4 flex flex-wrap gap-4 justify-center">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            {/* Enhanced Legend */}
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-green-400 to-emerald-400"></div>
                 <span className="text-xs text-gray-400">Excellent (95%+)</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-blue-400 to-cyan-400"></div>
                 <span className="text-xs text-gray-400">Good (90-95%)</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-purple-400 to-pink-400"></div>
                 <span className="text-xs text-gray-400">Fair (85-90%)</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-4 h-4 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400"></div>
                 <span className="text-xs text-gray-400">Poor (Less than 85%)</span>
               </div>
             </div>
           </Card>
 
-          {/* Node Details */}
+          {/* Enhanced Node Details */}
           <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
             <h3 className="text-xl font-semibold text-white mb-4">Node Details</h3>
             {selectedValidatorData ? (
@@ -381,19 +483,19 @@ const NetworkVisualization = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between">
                     <span className="text-gray-400">Performance</span>
-                    <span className="text-white">{selectedValidatorData.performanceScore.toFixed(1)}</span>
+                    <span className="text-white font-medium">{selectedValidatorData.performanceScore.toFixed(1)}%</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Uptime</span>
-                    <span className="text-white">{(selectedValidatorData.uptime * 100).toFixed(1)}%</span>
+                    <span className="text-white font-medium">{(selectedValidatorData.uptime * 100).toFixed(1)}%</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Stake</span>
-                    <span className="text-white">{(selectedValidatorData.stake / 1000000).toFixed(1)}M</span>
+                    <span className="text-white font-medium">{(selectedValidatorData.stake / 1000000).toFixed(1)}M</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Commission</span>
-                    <span className="text-white">{selectedValidatorData.commission.toFixed(1)}%</span>
+                    <span className="text-white font-medium">{selectedValidatorData.commission.toFixed(1)}%</span>
                   </div>
                 </div>
                 <Badge
@@ -414,31 +516,35 @@ const NetworkVisualization = () => {
           </Card>
         </div>
 
-        {/* Network Stats */}
+        {/* Enhanced Network Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+          <Card className="p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border-purple-500/20">
             <div className="text-center">
-              <p className="text-2xl font-bold text-white">{nodes.length}</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+                {nodes.length}
+              </p>
               <p className="text-gray-400">Total Nodes</p>
             </div>
           </Card>
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+          <Card className="p-6 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-lg border-green-500/20">
             <div className="text-center">
-              <p className="text-2xl font-bold text-white">{nodes.filter((n) => n.status === 'active').length}</p>
+              <p className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                {nodes.filter((n) => n.status === 'active').length}
+              </p>
               <p className="text-gray-400">Active Nodes</p>
             </div>
           </Card>
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+          <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 backdrop-blur-lg border-blue-500/20">
             <div className="text-center">
-              <p className="text-2xl font-bold text-white">
+              <p className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
                 {(nodes.reduce((sum, n) => sum + n.connections, 0) / 2).toFixed(0)}
               </p>
               <p className="text-gray-400">Connections</p>
             </div>
           </Card>
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
+          <Card className="p-6 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 backdrop-blur-lg border-yellow-500/20">
             <div className="text-center">
-              <p className="text-2xl font-bold text-white">
+              <p className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
                 {nodes.length > 0 ? (nodes.reduce((sum, n) => sum + n.performance, 0) / nodes.length).toFixed(1) : '0'}
               </p>
               <p className="text-gray-400">Avg Performance</p>
