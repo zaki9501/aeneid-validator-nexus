@@ -96,114 +96,51 @@ export interface Validator {
 
 const API_BASE_URL = 'https://api-aeneid.storyscan.app';
 
-// Fallback mock data for when API fails
-const mockValidators: Validator[] = [
-  {
-    address: 'storyvaloper1abc123def456ghi789jkl012mno345pqr678stu',
-    name: 'StoryNode Pro',
-    logo: undefined,
-    stake: 1250000,
-    uptime: 0.998,
-    performanceScore: 98.5,
-    rewardsEarned: 45230,
-    lastActiveEpoch: 1247,
-    status: 'active',
-    region: 'North America',
-    validatorType: 'org',
-    delegators: 234,
-    commission: 5,
-    joinedEpoch: 1200,
-  },
-  {
-    address: 'storyvaloper2def456ghi789jkl012mno345pqr678stu901vwx',
-    name: 'Aeneid Validator',
-    logo: undefined,
-    stake: 980000,
-    uptime: 0.992,
-    performanceScore: 96.8,
-    rewardsEarned: 38920,
-    lastActiveEpoch: 1247,
-    status: 'active',
-    region: 'Europe',
-    validatorType: 'team',
-    delegators: 156,
-    commission: 7,
-    joinedEpoch: 1180,
-  },
-  {
-    address: 'storyvaloper3ghi789jkl012mno345pqr678stu901vwx234yza',
-    name: 'Solo Staker',
-    logo: undefined,
-    stake: 750000,
-    uptime: 0.975,
-    performanceScore: 94.2,
-    rewardsEarned: 29840,
-    lastActiveEpoch: 1246,
-    status: 'active',
-    region: 'Asia',
-    validatorType: 'solo',
-    delegators: 89,
-    commission: 10,
-    joinedEpoch: 1150,
-  },
-  {
-    address: 'storyvaloper4jkl012mno345pqr678stu901vwx234yza567bcd',
-    name: 'Protocol Guardian',
-    logo: undefined,
-    stake: 1100000,
-    uptime: 0.989,
-    performanceScore: 97.3,
-    rewardsEarned: 41250,
-    lastActiveEpoch: 1247,
-    status: 'active',
-    region: 'North America',
-    validatorType: 'org',
-    delegators: 298,
-    commission: 4,
-    joinedEpoch: 1190,
-  },
-  {
-    address: 'storyvaloper5mno345pqr678stu901vwx234yza567bcd890efg',
-    name: 'Testnet Titan',
-    logo: undefined,
-    stake: 650000,
-    uptime: 0.958,
-    performanceScore: 92.1,
-    rewardsEarned: 25670,
-    lastActiveEpoch: 1245,
-    status: 'active',
-    region: 'Europe',
-    validatorType: 'solo',
-    delegators: 67,
-    commission: 8,
-    joinedEpoch: 1170,
-  },
-];
-
 export const fetchValidators = async (): Promise<Validator[]> => {
+  console.log('Starting API fetch from:', `${API_BASE_URL}/validators`);
+  
   try {
-    console.log('Attempting to fetch validators from API...');
     const response = await fetch(`${API_BASE_URL}/validators`, {
+      method: 'GET',
       headers: {
         'accept': 'application/json',
+        'Content-Type': 'application/json',
       },
+      mode: 'cors',
     });
 
+    console.log('Response status:', response.status);
+    console.log('Response ok:', response.ok);
+    console.log('Response headers:', response.headers);
+
     if (!response.ok) {
+      console.error(`HTTP error! status: ${response.status}, statusText: ${response.statusText}`);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const data: ApiResponse = await response.json();
-    console.log('API response successful, received', data.items.length, 'validators');
+    console.log('API response successful, received', data.items?.length || 0, 'validators');
+    
+    if (!data.items || data.items.length === 0) {
+      console.error('API returned empty items array');
+      throw new Error('No validator data received from API');
+    }
+    
     console.log('Sample validator data:', data.items[0]);
     
-    return data.items.map(transformApiValidator);
-  } catch (error) {
-    console.error('Error fetching validators from API:', error);
-    console.log('Falling back to mock data...');
+    const transformedValidators = data.items.map(transformApiValidator);
+    console.log('Transformed validators:', transformedValidators.length);
+    console.log('Sample transformed validator:', transformedValidators[0]);
     
-    // Return mock data as fallback
-    return mockValidators;
+    return transformedValidators;
+  } catch (error) {
+    console.error('Detailed error fetching validators from API:');
+    console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    
+    // Re-throw the error instead of falling back to mock data
+    throw error;
   }
 };
 
