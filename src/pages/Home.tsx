@@ -1,15 +1,17 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { TrendingUp, Users, Award, Activity } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { mockValidators, mockRewardHistory } from '../data/mockData';
 import { fetchNetworkStats, NetworkStats } from '../services/networkApi';
+import { fetchValidators, Validator } from '../services/validatorApi';
 
 const Home = () => {
   const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
   const [isLive, setIsLive] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [topValidators, setTopValidators] = useState<Validator[]>([]);
+  const [isTopLoading, setIsTopLoading] = useState(true);
 
   // Fetch network stats on mount and then periodically
   useEffect(() => {
@@ -34,9 +36,21 @@ const Home = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const topValidators = mockValidators
-    .sort((a, b) => b.performanceScore - a.performanceScore)
-    .slice(0, 5);
+  useEffect(() => {
+    const loadTopValidators = async () => {
+      try {
+        setIsTopLoading(true);
+        const all = await fetchValidators('active');
+        const sorted = all.sort((a, b) => b.performanceScore - a.performanceScore).slice(0, 5);
+        setTopValidators(sorted);
+      } catch (e) {
+        setTopValidators([]);
+      } finally {
+        setIsTopLoading(false);
+      }
+    };
+    loadTopValidators();
+  }, []);
 
   const statusData = networkStats ? [
     { name: 'Active', value: networkStats.validators.active, color: '#8b5cf6' },
@@ -241,7 +255,11 @@ const Home = () => {
         <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
           <h3 className="text-xl font-semibold text-white mb-6">Top Performing Validators</h3>
           <div className="space-y-4">
-            {topValidators.map((validator, index) => (
+            {isTopLoading ? (
+              <div className="text-gray-400">Loading...</div>
+            ) : topValidators.length === 0 ? (
+              <div className="text-gray-400">No data available.</div>
+            ) : topValidators.map((validator, index) => (
               <div key={validator.address} className="flex items-center justify-between p-4 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
                 <div className="flex items-center space-x-4">
                   <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center text-white font-bold">

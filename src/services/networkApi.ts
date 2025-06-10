@@ -1,4 +1,3 @@
-
 export interface NetworkStats {
   blockTime: {
     startHeight: number;
@@ -32,7 +31,7 @@ export const fetchNetworkStats = async (): Promise<NetworkStats> => {
   console.log('Fetching network stats from:', `${API_BASE_URL}/chain/network`);
   
   try {
-    const response = await fetch(`${API_BASE_URL}/chain/network`, {
+    const response = await fetch('/api/chain/network', {
       method: 'GET',
       headers: {
         'accept': 'application/json',

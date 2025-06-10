@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,6 +12,7 @@ import RewardsAnalytics from "./pages/RewardsAnalytics";
 import NetworkVisualization from "./pages/NetworkVisualization";
 import Education from "./pages/Education";
 import NotFound from "./pages/NotFound";
+import CompareValidators from "./pages/CompareValidators";
 
 const queryClient = new QueryClient();
 
@@ -27,6 +27,7 @@ const App = () => (
             <Route path="/" element={<Home />} />
             <Route path="/validators" element={<ValidatorsExplorer />} />
             <Route path="/validators/:address" element={<ValidatorDetails />} />
+            <Route path="/compare" element={<CompareValidators />} />
             <Route path="/leaderboard" element={<Leaderboard />} />
             <Route path="/rewards" element={<RewardsAnalytics />} />
             <Route path="/network" element={<NetworkVisualization />} />

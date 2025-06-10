@@ -1,17 +1,33 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, Trophy, Medal, Award } from 'lucide-react';
-import { mockValidators } from '../data/mockData';
+import { fetchValidators, Validator } from '../services/validatorApi';
 
 const Leaderboard = () => {
   const [timeframe, setTimeframe] = useState<'weekly' | 'monthly' | 'epoch'>('weekly');
   const [metric, setMetric] = useState<'performance' | 'uptime' | 'rewards' | 'stake'>('performance');
+  const [validators, setValidators] = useState<Validator[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      setIsLoading(true);
+      try {
+        const all = await fetchValidators('active');
+        setValidators(all);
+      } catch (e) {
+        setValidators([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    load();
+  }, []);
 
   const getSortedValidators = () => {
-    let sortField: keyof typeof mockValidators[0];
+    let sortField: keyof Validator;
     switch (metric) {
       case 'performance': sortField = 'performanceScore'; break;
       case 'uptime': sortField = 'uptime'; break;
@@ -19,8 +35,7 @@ const Leaderboard = () => {
       case 'stake': sortField = 'stake'; break;
       default: sortField = 'performanceScore';
     }
-    
-    return [...mockValidators].sort((a, b) => (b[sortField] as number) - (a[sortField] as number));
+    return [...validators].sort((a, b) => (b[sortField] as number) - (a[sortField] as number));
   };
 
   const sortedValidators = getSortedValidators();
@@ -39,7 +54,7 @@ const Leaderboard = () => {
     return 'from-white/5 to-white/10 border-white/10';
   };
 
-  const getMetricValue = (validator: typeof mockValidators[0]) => {
+  const getMetricValue = (validator: Validator) => {
     switch (metric) {
       case 'performance': return `${validator.performanceScore.toFixed(1)}`;
       case 'uptime': return `${validator.uptime.toFixed(1)}%`;
@@ -115,7 +130,9 @@ const Leaderboard = () => {
 
         {/* Top 3 Podium */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {sortedValidators.slice(0, 3).map((validator, index) => {
+          {isLoading ? (
+            <Card className="p-6 text-gray-400">Loading...</Card>
+          ) : sortedValidators.slice(0, 3).map((validator, index) => {
             const rank = index + 1;
             return (
               <Card 
@@ -152,9 +169,10 @@ const Leaderboard = () => {
             <TrendingUp className="w-5 h-5" />
             Complete Rankings
           </h3>
-          
           <div className="space-y-3">
-            {sortedValidators.map((validator, index) => {
+            {isLoading ? (
+              <div className="text-gray-400">Loading...</div>
+            ) : sortedValidators.map((validator, index) => {
               const rank = index + 1;
               return (
                 <div 
@@ -176,7 +194,6 @@ const Leaderboard = () => {
                       {validator.validatorType}
                     </Badge>
                   </div>
-                  
                   <div className="text-right">
                     <p className="text-xl font-bold text-white">{getMetricValue(validator)}</p>
                     <p className="text-sm text-gray-400">{getMetricLabel()}</p>

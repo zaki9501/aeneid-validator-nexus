@@ -1,4 +1,3 @@
-
 export interface ApiValidator {
   operatorAddress: string;
   hexAddress: string;
@@ -92,9 +91,31 @@ export interface Validator {
   delegators: number;
   commission: number;
   joinedEpoch: number;
+  accountAddress: string;
+  evmAddress: string;
+  consensusAddress: string;
+  hexAddress: string;
+  maxCommissionRate: number;
+  maxChangeRate: number;
+  commissionUpdateTime: string;
+  successBlocks?: number;
+  earliestHeight?: number;
+  lastSyncHeight?: number;
+  missedBlocks?: number;
+  selfBondedTokens?: number;
+  votingPowerPercent?: number;
 }
 
-const API_BASE_URL = 'https://api-aeneid.storyscan.app';
+export interface SlashingInfo {
+  address: string;
+  start_height?: string;
+  index_offset?: string;
+  jailed_until?: string;
+  missed_blocks_counter?: string;
+  tombstoned?: boolean;
+}
+
+const API_BASE_URL = '/api';
 
 // Sample data based on the real API structure you provided
 const fallbackApiData: ApiResponse = {
@@ -288,56 +309,77 @@ const fallbackApiData: ApiResponse = {
   ]
 };
 
-export const fetchValidators = async (): Promise<Validator[]> => {
-  console.log('Starting API fetch from:', `${API_BASE_URL}/validators`);
-  
-  try {
-    const response = await fetch(`${API_BASE_URL}/validators`, {
-      method: 'GET',
-      headers: {
-        'accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      mode: 'cors',
-    });
+export const fetchValidators = async (status: 'all' | 'active' | 'inactive' | 'slashed' = 'all'): Promise<Validator[]> => {
+  let allItems: ApiValidator[] = [];
+  let offset = 0;
+  const limit = 50;
+  let hasMore = true;
 
-    console.log('Response status:', response.status);
-    console.log('Response ok:', response.ok);
-
-    if (!response.ok) {
-      console.error(`HTTP error! status: ${response.status}, statusText: ${response.statusText}`);
-      throw new Error(`HTTP error! status: ${response.status}`);
+  while (hasMore) {
+    let url = `${API_BASE_URL}/validators?offset=${offset}&limit=${limit}`;
+    if (status === 'active') {
+      url += `&isActive=true`;
+    } else if (status === 'inactive') {
+      url += `&isActive=false`;
     }
+    // Do NOT add isActive for 'slashed' or 'all'
+    // For 'slashed', filter locally after fetching all
 
-    const data: ApiResponse = await response.json();
-    console.log('API response successful, received', data.items?.length || 0, 'validators');
-    
-    if (!data.items || data.items.length === 0) {
-      console.error('API returned empty items array');
-      throw new Error('No validator data received from API');
+    console.log('Starting API fetch from:', url);
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        mode: 'cors',
+      });
+
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+
+      if (!response.ok) {
+        console.error(`HTTP error! status: ${response.status}, statusText: ${response.statusText}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data: ApiResponse = await response.json();
+      console.log('API response successful, received', data.items?.length || 0, 'validators');
+
+      if (!data.items || data.items.length === 0) {
+        hasMore = false;
+      } else {
+        allItems = allItems.concat(data.items);
+        hasMore = data.items.length === limit;
+        offset += limit;
+      }
+    } catch (error) {
+      console.error('Detailed error fetching validators from API:');
+      console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
+      console.error('Error message:', error instanceof Error ? error.message : String(error));
+
+      // CORS fallback: Use sample data that matches the real API structure
+      console.log('Using fallback data due to CORS restrictions...');
+      console.log('Note: This is sample data with the same structure as the real API');
+
+      let transformedValidators = fallbackApiData.items.map(transformApiValidator);
+      if (status === 'slashed') {
+        transformedValidators = transformedValidators.filter(v => v.status === 'slashed');
+      }
+      return transformedValidators;
     }
-    
-    console.log('Sample validator data:', data.items[0]);
-    
-    const transformedValidators = data.items.map(transformApiValidator);
-    console.log('Transformed validators:', transformedValidators.length);
-    console.log('Sample transformed validator:', transformedValidators[0]);
-    
-    return transformedValidators;
-  } catch (error) {
-    console.error('Detailed error fetching validators from API:');
-    console.error('Error type:', error instanceof Error ? error.constructor.name : typeof error);
-    console.error('Error message:', error instanceof Error ? error.message : String(error));
-    
-    // CORS fallback: Use sample data that matches the real API structure
-    console.log('Using fallback data due to CORS restrictions...');
-    console.log('Note: This is sample data with the same structure as the real API');
-    
-    const transformedValidators = fallbackApiData.items.map(transformApiValidator);
-    console.log('Fallback validators loaded:', transformedValidators.length);
-    
-    return transformedValidators;
   }
+
+  let transformedValidators = allItems.map(transformApiValidator);
+  if (status === 'slashed') {
+    transformedValidators = transformedValidators.filter(v => v.status === 'slashed');
+  }
+  console.log('Transformed validators:', transformedValidators.length);
+  if (transformedValidators.length > 0) {
+    console.log('Sample transformed validator:', transformedValidators[0]);
+  }
+  return transformedValidators;
 };
 
 const transformApiValidator = (apiValidator: ApiValidator): Validator => {
@@ -387,7 +429,7 @@ const transformApiValidator = (apiValidator: ApiValidator): Validator => {
     address: apiValidator.operatorAddress,
     name: apiValidator.description?.moniker || 'Unknown Validator',
     logo: apiValidator.description?.avatar || undefined,
-    stake: apiValidator.tokens || 0,
+    stake: (apiValidator.tokens || 0) / 1_000_000_000,
     uptime: uptimePercent,
     performanceScore: performanceScore,
     rewardsEarned: estimatedRewards,
@@ -398,5 +440,141 @@ const transformApiValidator = (apiValidator: ApiValidator): Validator => {
     delegators: Math.floor(parseFloat(apiValidator.delegatorShares || '0') / 1000000000000), // Rough estimate
     commission: commissionRate,
     joinedEpoch: joinedEpoch,
+    accountAddress: apiValidator.accountAddress,
+    evmAddress: apiValidator.evmAddress,
+    consensusAddress: apiValidator.consensusAddress,
+    hexAddress: apiValidator.hexAddress,
+    maxCommissionRate: parseFloat(apiValidator.commission?.commissionRates?.maxRate || '0') * 100,
+    maxChangeRate: parseFloat(apiValidator.commission?.commissionRates?.maxChangeRate || '0') * 100,
+    commissionUpdateTime: typeof apiValidator.commission?.updateTime === 'string' ? apiValidator.commission.updateTime : '',
+    successBlocks: apiValidator.uptime?.historicalUptime?.successBlocks,
+    earliestHeight: apiValidator.uptime?.historicalUptime?.earliestHeight,
+    lastSyncHeight: apiValidator.uptime?.historicalUptime?.lastSyncHeight,
+    missedBlocks: (apiValidator.uptime?.historicalUptime?.lastSyncHeight !== undefined && apiValidator.uptime?.historicalUptime?.earliestHeight !== undefined && apiValidator.uptime?.historicalUptime?.successBlocks !== undefined)
+      ? (apiValidator.uptime.historicalUptime.lastSyncHeight - apiValidator.uptime.historicalUptime.earliestHeight + 1 - apiValidator.uptime.historicalUptime.successBlocks)
+      : undefined,
+    selfBondedTokens: apiValidator.selfBondedTokens,
+    votingPowerPercent: apiValidator.votingPowerPercent,
   };
+};
+
+export const fetchValidatorByAddress = async (address: string): Promise<Validator> => {
+  const url = `${API_BASE_URL}/validators/${address}`;
+  console.log('Fetching single validator from:', url);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      mode: 'cors',
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data: ApiValidator = await response.json();
+    return transformApiValidator(data);
+  } catch (error) {
+    console.error('Error fetching validator by address:', error);
+    throw error;
+  }
+};
+
+export const fetchDelegatorsCount = async (address: string): Promise<number> => {
+  const url = `${API_BASE_URL}/validators/${address}/delegators`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+    mode: 'cors',
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const data = await response.json();
+  // Use the correct property from the API response
+  return data.validatorDelegators ?? 0;
+};
+
+export const fetchValidatorUptimeBlocks = async (operatorAddress: string): Promise<{height: number, signed: boolean}[]> => {
+  const url = `${API_BASE_URL}/blocks/uptime/${operatorAddress}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+    mode: 'cors',
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  return await response.json();
+};
+
+export const fetchValidatorDelegators = async (address: string): Promise<{address: string, moniker?: string, amount: number}[]> => {
+  const url = `${API_BASE_URL}/validators/${address}/delegations`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+    mode: 'cors',
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const data = await response.json();
+  if (!Array.isArray(data.items)) return [];
+  return data.items.map((item: any) => ({
+    address: item.delegator.address,
+    moniker: item.delegator.moniker,
+    amount: Number(item.amount) / 1_000_000_000,
+  }));
+};
+
+export const fetchValidatorPowerEvents = async (address: string): Promise<Array<{delegator: string, validator: string, txHash: string, time: string, amount: number, type: string}>> => {
+  const url = `${API_BASE_URL}/validators/${address}/power-events`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+    mode: 'cors',
+  });
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+  const data = await response.json();
+  if (!Array.isArray(data.items)) return [];
+  return data.items.map((item: any) => ({
+    delegator: item.delegator,
+    validator: item.validator,
+    txHash: item.tx?.hash,
+    time: item.tx?.time,
+    amount: Number(item.amount) / 1_000_000_000,
+    type: item.type,
+  }));
+};
+
+export const fetchSlashingInfos = async (offset = 0, limit = 100): Promise<SlashingInfo[]> => {
+  const url = `https://api-story-testnet.itrocket.net/cosmos/slashing/v1beta1/signing_infos?pagination.offset=${offset}&pagination.limit=${limit}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Failed to fetch slashing infos');
+  const data = await response.json();
+  return data.info || [];
+};
+
+export const fetchProposedBlocksCount = async (): Promise<Record<string, number>> => {
+  const url = 'https://corsproxy.io/?https://api-aeneid.storyscan.app/blocks?withSignatures=true';
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Failed to fetch blocks');
+  const data = await response.json();
+  console.log('Fetched blocks data:', data);
+  const counts: Record<string, number> = {};
+  for (const block of data) {
+    const proposer = block.proposer?.operatorAddress;
+    if (proposer) {
+      counts[proposer] = (counts[proposer] || 0) + 1;
+    }
+  }
+  console.log('Proposed blocks counts:', counts);
+  return counts;
 };
