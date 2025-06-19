@@ -1,10 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import * as echarts from 'echarts';
 import ReactECharts from 'echarts-for-react';
 import 'leaflet/dist/leaflet.css';
+
+// Fix Leaflet default markers
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
 
 // Types
 interface Validator {
@@ -223,26 +232,31 @@ const createValidatorsData = (): Validator[] => {
 };
 
 // Create glowing icon function
-const createGlowingIcon = (color: string) => {
+const createGlowingIcon = (color: string, status: string) => {
+  const size = status === 'active' ? 12 : 8;
   return L.divIcon({
     className: 'custom-marker',
     html: `
-      <div class="marker-pin" style="
-        width: 12px;
-        height: 12px;
+      <div style="
+        width: ${size}px;
+        height: ${size}px;
         background: ${color};
+        border: 2px solid white;
         border-radius: 50%;
         box-shadow: 0 0 10px ${color}, 0 0 20px ${color}40;
         animation: pulse 2s infinite;
+        position: relative;
+        z-index: 1000;
       "></div>
     `,
-    iconSize: [12, 12],
-    iconAnchor: [6, 6],
+    iconSize: [size, size],
+    iconAnchor: [size/2, size/2],
   });
 };
 
 const NetworkVisualization = () => {
   const [validators] = useState<Validator[]>(createValidatorsData());
+  const [mapboxToken, setMapboxToken] = useState('');
 
   // Calculate statistics
   const totalValidators = validators.length;
@@ -269,10 +283,10 @@ const NetworkVisualization = () => {
 
   const getValidatorColor = (status: string, performance: number): string => {
     if (status === 'slashed') return '#ef4444';
-    if (performance > 95) return '#10b981';
-    if (performance > 90) return '#3b82f6';
-    if (performance > 85) return '#8b5cf6';
-    return '#f59e0b';
+    if (performance > 99) return '#10b981'; // Green for excellent
+    if (performance > 95) return '#3b82f6'; // Blue for good
+    if (performance > 90) return '#8b5cf6'; // Purple for fair
+    return '#f59e0b'; // Yellow for poor
   };
 
   // Mock data for charts
@@ -549,10 +563,17 @@ const NetworkVisualization = () => {
       {/* Top Bar */}
       <div className="flex justify-between items-center mb-2 h-[40px]">
         <div className="flex items-center gap-3">
-          {/* TODO: Add logo if needed */}
           <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Story Testnet Network Dashboard</span>
         </div>
-        <div className="text-gray-400 text-sm">{new Date().toLocaleString()}</div>
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Enter Mapbox token (optional)"
+            value={mapboxToken}
+            onChange={(e) => setMapboxToken(e.target.value)}
+            className="w-64 bg-white/10 border-white/20 text-white placeholder:text-gray-400"
+          />
+          <div className="text-gray-400 text-sm">{new Date().toLocaleString()}</div>
+        </div>
       </div>
 
       {/* Main Dashboard Grid */}
@@ -626,63 +647,95 @@ const NetworkVisualization = () => {
           <Card className="bg-white/5 border-white/10 p-2 flex-1 overflow-hidden">
             <style>{`
               .leaflet-container {
-                background: #0f172a;
+                background: #0f172a !important;
                 height: 100%;
                 width: 100%;
                 border-radius: 0.5rem;
+                z-index: 1;
               }
               .leaflet-tile {
-                filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+                filter: brightness(0.4) contrast(1.2) saturate(0.8);
+              }
+              .leaflet-control-container {
+                filter: invert(1);
               }
               @keyframes pulse {
                 0% { transform: scale(1); opacity: 1; }
-                50% { transform: scale(1.3); opacity: 0.7; }
+                50% { transform: scale(1.2); opacity: 0.8; }
                 100% { transform: scale(1); opacity: 1; }
               }
               .custom-marker {
-                animation: pulse 2s infinite;
+                z-index: 1000 !important;
               }
               .leaflet-popup-content-wrapper {
-                background: rgba(30, 41, 59, 0.95);
-                color: #fff;
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(30, 41, 59, 0.95) !important;
+                color: #fff !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
                 backdrop-filter: blur(8px);
+                border-radius: 8px;
               }
               .leaflet-popup-tip {
-                background: rgba(30, 41, 59, 0.95);
+                background: rgba(30, 41, 59, 0.95) !important;
+              }
+              .leaflet-popup-close-button {
+                color: #fff !important;
               }
             `}</style>
             <MapContainer
-              center={[45, 10]}
-              zoom={3}
-              minZoom={2}
-              maxZoom={18}
+              center={[20, 0]}
+              zoom={2}
+              minZoom={1}
+              maxZoom={10}
               scrollWheelZoom={true}
-              style={{ height: '100%', width: '100%', background: '#0f172a' }}
+              style={{ height: '100%', width: '100%' }}
             >
               <TileLayer
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               {validators.map((validator) => {
-                const [baseLat, baseLng] = countryCoordinates[validator.country] || [0, 0];
-                const latOffset = (Math.random() - 0.5) * 4;
-                const lngOffset = (Math.random() - 0.5) * 4;
+                const countryCoords = countryCoordinates[validator.country];
+                if (!countryCoords) return null;
+                
+                const [baseLat, baseLng] = countryCoords;
+                // Add small random offset to prevent exact overlap
+                const latOffset = (Math.random() - 0.5) * 2;
+                const lngOffset = (Math.random() - 0.5) * 2;
+                const finalLat = baseLat + latOffset;
+                const finalLng = baseLng + lngOffset;
+                
                 return (
                   <Marker
                     key={validator.id}
-                    position={[baseLat + latOffset, baseLng + lngOffset]}
-                    icon={createGlowingIcon(getValidatorColor(validator.status, validator.performance))}
+                    position={[finalLat, finalLng]}
+                    icon={createGlowingIcon(getValidatorColor(validator.status, validator.performance), validator.status)}
                   >
-                    <Popup>
-                      <div className="p-2">
-                        <h3 className="font-bold text-white mb-2">{validator.name}</h3>
-                        <div className="text-sm space-y-1">
-                          <p className="text-gray-300">Region: <span className="text-white">{validator.region}</span></p>
-                          <p className="text-gray-300">Country: <span className="text-white">{validator.country}</span></p>
-                          <p className="text-gray-300">Provider: <span className="text-white">{validator.provider}</span></p>
-                          <p className="text-gray-300">Status: <span className="text-white">{validator.status}</span></p>
-                          <p className="text-gray-300">Performance: <span className="text-white">{validator.performance}%</span></p>
+                    <Popup maxWidth={300}>
+                      <div className="p-3 min-w-[250px]">
+                        <h3 className="font-bold text-white mb-2 text-lg">{validator.name}</h3>
+                        <div className="text-sm space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-gray-300">Region:</span>
+                            <span className="text-white font-medium">{validator.region}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-300">Country:</span>
+                            <span className="text-white font-medium">{validator.country}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-300">Provider:</span>
+                            <span className="text-white font-medium text-xs">{validator.provider}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-300">Status:</span>
+                            <span className={`font-medium ${validator.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>
+                              {validator.status}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-300">Performance:</span>
+                            <span className="text-white font-medium">{validator.performance.toFixed(1)}%</span>
+                          </div>
                         </div>
                       </div>
                     </Popup>
