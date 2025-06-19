@@ -233,7 +233,7 @@ const createValidatorsData = (): Validator[] => {
 
 // Create glowing icon function
 const createGlowingIcon = (color: string, status: string) => {
-  const size = status === 'active' ? 12 : 8;
+  const size = status === 'active' ? 14 : 10;
   return L.divIcon({
     className: 'custom-marker',
     html: `
@@ -241,16 +241,19 @@ const createGlowingIcon = (color: string, status: string) => {
         width: ${size}px;
         height: ${size}px;
         background: ${color};
-        border: 2px solid white;
+        border: 3px solid rgba(255, 255, 255, 0.9);
         border-radius: 50%;
-        box-shadow: 0 0 10px ${color}, 0 0 20px ${color}40;
+        box-shadow: 
+          0 0 15px ${color}, 
+          0 0 30px ${color}80,
+          0 0 45px ${color}40;
         animation: pulse 2s infinite;
         position: relative;
         z-index: 1000;
       "></div>
     `,
-    iconSize: [size, size],
-    iconAnchor: [size/2, size/2],
+    iconSize: [size + 6, size + 6],
+    iconAnchor: [(size + 6)/2, (size + 6)/2],
   });
 };
 
@@ -647,38 +650,75 @@ const NetworkVisualization = () => {
           <Card className="bg-white/5 border-white/10 p-2 flex-1 overflow-hidden">
             <style>{`
               .leaflet-container {
-                background: #0f172a !important;
+                background: #0a0a0a !important;
                 height: 100%;
                 width: 100%;
                 border-radius: 0.5rem;
                 z-index: 1;
               }
               .leaflet-tile {
-                filter: brightness(0.4) contrast(1.2) saturate(0.8);
+                filter: brightness(0.2) contrast(1.8) saturate(0.3) hue-rotate(200deg);
+                opacity: 0.7;
               }
               .leaflet-control-container {
-                filter: invert(1);
+                filter: invert(1) brightness(0.8);
+              }
+              .leaflet-control-zoom {
+                background: rgba(30, 30, 30, 0.9) !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+              }
+              .leaflet-control-zoom a {
+                background: rgba(30, 30, 30, 0.9) !important;
+                color: white !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+              }
+              .leaflet-control-zoom a:hover {
+                background: rgba(60, 60, 60, 0.9) !important;
               }
               @keyframes pulse {
-                0% { transform: scale(1); opacity: 1; }
-                50% { transform: scale(1.2); opacity: 0.8; }
-                100% { transform: scale(1); opacity: 1; }
+                0% { 
+                  transform: scale(1); 
+                  opacity: 1; 
+                  box-shadow: 
+                    0 0 15px currentColor, 
+                    0 0 30px currentColor;
+                }
+                50% { 
+                  transform: scale(1.3); 
+                  opacity: 0.8; 
+                  box-shadow: 
+                    0 0 25px currentColor, 
+                    0 0 50px currentColor,
+                    0 0 75px currentColor;
+                }
+                100% { 
+                  transform: scale(1); 
+                  opacity: 1; 
+                  box-shadow: 
+                    0 0 15px currentColor, 
+                    0 0 30px currentColor;
+                }
               }
               .custom-marker {
                 z-index: 1000 !important;
               }
               .leaflet-popup-content-wrapper {
-                background: rgba(30, 41, 59, 0.95) !important;
+                background: rgba(15, 15, 15, 0.95) !important;
                 color: #fff !important;
-                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                border: 1px solid rgba(255, 255, 255, 0.2) !important;
                 backdrop-filter: blur(8px);
                 border-radius: 8px;
               }
               .leaflet-popup-tip {
-                background: rgba(30, 41, 59, 0.95) !important;
+                background: rgba(15, 15, 15, 0.95) !important;
               }
               .leaflet-popup-close-button {
                 color: #fff !important;
+                font-size: 18px !important;
+                font-weight: bold !important;
+              }
+              .leaflet-popup-close-button:hover {
+                color: #ccc !important;
               }
             `}</style>
             <MapContainer
