@@ -1,594 +1,733 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { ZoomIn, ZoomOut, RotateCcw, Loader2, MapPin } from 'lucide-react';
-import { fetchValidators, Validator } from '../services/validatorApi';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
+import * as echarts from 'echarts';
+import ReactECharts from 'echarts-for-react';
 import 'leaflet/dist/leaflet.css';
 
-interface Node {
+// Types
+interface Validator {
   id: string;
   name: string;
-  x: number;
-  y: number;
-  size: number;
-  performance: number;
+  lat: number;
+  lng: number;
   status: 'active' | 'inactive' | 'slashed';
-  connections: number;
+  performance: number;
   region: string;
-  uptime: number;
-  stake: number;
-  commission: number;
-  pulsePhase: number;
+  country: string;
+  provider: string;
 }
 
-const NetworkVisualization = () => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animationRef = useRef<number>();
-  const [zoom, setZoom] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [lastMousePos, setLastMousePos] = useState({ x: 0, y: 0 });
-  const [viewType, setViewType] = useState<'network' | 'geographic' | 'clusters'>('network');
-  const [selectedValidator, setSelectedValidator] = useState<string | null>(null);
-  const [hoveredValidator, setHoveredValidator] = useState<string | null>(null);
+interface TopValidator {
+  id: string;
+  name: string;
+  performance: number;
+  stake: string;
+}
 
-  const { data: validators = [], isLoading, error } = useQuery({
-    queryKey: ['validators'],
-    queryFn: () => fetchValidators('all'),
-    refetchInterval: 30000,
+interface RecentEvent {
+  id: number;
+  type: string;
+  validator: string;
+  time: string;
+  status: 'success' | 'warning' | 'error';
+}
+
+// Country coordinates mapping
+const countryCoordinates: { [key: string]: [number, number] } = {
+  'Germany': [51.1657, 10.4515],
+  'Finland': [61.9241, 25.7482],
+  'United States': [37.0902, -95.7129],
+  'Singapore': [1.3521, 103.8198],
+  'Austria': [47.5162, 14.5501],
+  'France': [46.2276, 2.2137],
+  'Poland': [51.9194, 19.1451],
+  'United Kingdom': [55.3781, -3.4360],
+  'Canada': [56.1304, -106.3468],
+  'Belgium': [50.8503, 4.3517],
+  'Hong Kong': [22.3193, 114.1694],
+  'Ireland': [53.1424, -7.6921],
+  'Lithuania': [55.1694, 23.8813],
+  'Taiwan': [23.5937, 120.5833],
+  'The Netherlands': [52.1326, 5.2913]
+};
+
+// Add small random offset to prevent overlapping markers
+const getOffsetCoordinates = (lat: number, lng: number): [number, number] => {
+  const latOffset = (Math.random() - 0.5) * 2;
+  const lngOffset = (Math.random() - 0.5) * 2;
+  return [lat + latOffset, lng + lngOffset];
+};
+
+// Validators data from user
+const validatorsData: Omit<Validator, 'lat' | 'lng' | 'status' | 'performance'>[] = [
+  { id: '1', name: 'bangpateng', region: 'Europe', country: 'Germany', provider: 'AMAZON-02' },
+  { id: '2', name: 'OneNov', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
+  { id: '3', name: 'Strivenode', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
+  { id: '4', name: 'wansnode', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
+  { id: '5', name: 'Winnode', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
+  { id: '6', name: 'gv-story', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
+  { id: '7', name: 'node-story-aeneid-1', region: 'Europe', country: 'Germany', provider: 'DIGITALOCEAN-ASN' },
+  { id: '8', name: '[NODERS]_SERVICES', region: 'Europe', country: 'Germany', provider: 'GOOGLE-CLOUD-PLATFORM' },
+  { id: '9', name: 'Alchemy', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '10', name: 'Auranode', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '11', name: 'BlockPro', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '12', name: 'breskulpeak.com', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '13', name: 'c83c6280fcd2', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '14', name: 'charizard', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '15', name: 'Chicharito', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '16', name: 'deNodes', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '17', name: 'DTEAM | RPC', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '18', name: 'DTEAM | Snapshots', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '19', name: 'empirex', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '20', name: 'encapsulate', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '21', name: 'F7K3X3FfrrXrTrjK3K387VEt82ry8ab8', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '22', name: 'FuryNodes', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '23', name: 'imp', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '24', name: 'kaplan', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '25', name: 'l5tlong', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '26', name: 'LuckyStar', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '27', name: 'metilnodes', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '28', name: 'naruto', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '29', name: 'node', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '30', name: 'Nodeinfra', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '31', name: 'NodeSphere', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '32', name: 'openbitlab', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '33', name: 'polkachu', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '34', name: 'rpc-1.odyssey.story.nodes.guru', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '35', name: 'StakeUs', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '36', name: 'validator', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '37', name: 'Validator247', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '38', name: 'ValidatorVN', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '39', name: 'xxxigm', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '40', name: 'TrustedPoint', region: 'Europe', country: 'Germany', provider: 'Hetzner Online GmbH' },
+  { id: '41', name: 'someone sentry node', region: 'Europe', country: 'Germany', provider: 'LATITUDE-SH' },
+  { id: '42', name: '5Kage', region: 'Europe', country: 'Germany', provider: 'Tencent Building, Kejizhongyi Avenue' },
+  { id: '43', name: 'devnet-1-seed', region: 'Europe', country: 'Germany', provider: 'Unknown' },
+  { id: '44', name: 'Nodesforall', region: 'Europe', country: 'Germany', provider: 'Unknown' },
+  { id: '45', name: 'Provalidator', region: 'Europe', country: 'Germany', provider: 'Unknown' },
+  { id: '46', name: 'StoneGaze', region: 'Europe', country: 'Germany', provider: 'Unknown' },
+  { id: '47', name: 'BlockHub', region: 'Europe', country: 'Germany', provider: 'Unknown' },
+  { id: '48', name: '[NODERS]SERVICES_ARCHIVE', region: 'Europe', country: 'Germany', provider: 'netcup GmbH' },
+  { id: '49', name: '1XP', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '50', name: 'Aldebaranode', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '51', name: 'ApexNodes', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '52', name: 'bitsturbine', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '53', name: 'BlockPI', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '54', name: 'CherryValidator', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '55', name: 'COCOCOPS', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '56', name: 'CoinHunters', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '57', name: 'corenode', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '58', name: 'CroutonDigital', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '59', name: 'HazenNetworkSolutions', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '60', name: 'hello-world', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '61', name: 'ITRocket', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '62', name: 'kgnodes', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '63', name: 'KruGGoK-Stakesnodes', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '64', name: 'Kyronode', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '65', name: 'MekongLabs', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '66', name: 'node', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '67', name: 'OriginStake', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '68', name: 'popsteam', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '69', name: 'service_unity_nodes', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '70', name: 'shachopra', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '71', name: 'snsn', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '72', name: 'Spider Node', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '73', name: 'ST-SERVER', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '74', name: 'ST-SERVER', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '75', name: 'STAVR', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '76', name: 'test', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '77', name: 'testis', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '78', name: 'ToToNode', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '79', name: 'Unity', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '80', name: 'UTSA_guide', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '81', name: 'ValidatorVNRPC', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '82', name: 'story-0', region: 'Europe', country: 'Finland', provider: 'Hetzner Online GmbH' },
+  { id: '83', name: 'Cumulo', region: 'North America', country: 'United States', provider: 'AMAZON-AES' },
+  { id: '84', name: 'DSRV', region: 'North America', country: 'United States', provider: 'AS-30083-GO-DADDY-COM-LLC' },
+  { id: '85', name: 'use1-aeneid-bootnode1', region: 'North America', country: 'United States', provider: 'DIGITALOCEAN-ASN' },
+  { id: '86', name: 'use1-aeneid-bootnode2', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '87', name: 'use1-aeneid-internal-archive-rpc1', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '88', name: 'use1-aeneid-internal-full-rpc1', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '89', name: 'use1-aeneid-public-rpc1', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '90', name: 'use1-aeneid-public-rpc2', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '91', name: 'use1-aeneid-public-rpc4', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '92', name: 'use1-aeneid-validator1', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '93', name: 'use1-aeneid-validator2', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '94', name: 'use1-aeneid-validator3', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '95', name: 'use1-aeneid-validator4.us-east1-d.c.story-aeneid.internal', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '96', name: 'Krews', region: 'North America', country: 'United States', provider: 'GOOGLE' },
+  { id: '97', name: 'archive_rpc', region: 'North America', country: 'United States', provider: 'IS-AS-1' },
+  { id: '98', name: 'snap', region: 'North America', country: 'United States', provider: 'LEVEL3' },
+  { id: '99', name: 'InfStones', region: 'North America', country: 'United States', provider: 'LEVEL3' },
+  { id: '100', name: 'story-aeneid-archive-ora-iad-a00', region: 'North America', country: 'United States', provider: 'ORACLE-BMC-31898' },
+  { id: '101', name: 'story-aeneid-archive-ora-iad-a01', region: 'North America', country: 'United States', provider: 'ORACLE-BMC-31898' },
+  { id: '102', name: 'story-aeneid-archive-ora-iad-b00', region: 'North America', country: 'United States', provider: 'ORACLE-BMC-31898' },
+  { id: '103', name: 'story-aeneid-archive-ora-iad-b01', region: 'North America', country: 'United States', provider: 'ORACLE-BMC-31898' },
+  { id: '104', name: 'story-aeneid-ronald-archive-ora-iad-a00', region: 'North America', country: 'United States', provider: 'ORACLE-BMC-31898' },
+  { id: '105', name: 'Republic', region: 'North America', country: 'United States', provider: 'OVH SAS' },
+  { id: '106', name: 'moonli.me', region: 'North America', country: 'United States', provider: 'OVH SAS' },
+  { id: '107', name: '534099dde70b', region: 'North America', country: 'United States', provider: 'RELIABLESITE' },
+  { id: '108', name: 'e01bb68df2ce', region: 'North America', country: 'United States', provider: 'SINGLEHOP-LLC' },
+  { id: '109', name: 'bstg-ip-1', region: 'North America', country: 'United States', provider: 'TERASWITCH' },
+  { id: '110', name: 'Technocrypt', region: 'Asia', country: 'Singapore', provider: 'AMAZON-02' },
+  { id: '111', name: 'WHTech', region: 'Asia', country: 'Singapore', provider: 'DIGITALOCEAN-ASN' },
+  { id: '112', name: 'abc', region: 'Asia', country: 'Singapore', provider: 'DIGITALOCEAN-ASN' },
+  { id: '113', name: 'catsmile', region: 'Asia', country: 'Singapore', provider: 'GOOGLE-CLOUD-PLATFORM' },
+  { id: '114', name: '534099dde70b', region: 'Asia', country: 'Singapore', provider: 'Hostinger International Limited' },
+  { id: '115', name: 'ContributionDAO', region: 'Asia', country: 'Singapore', provider: 'INTERNAP-BLK4' },
+  { id: '116', name: 'coinage_x_daic', region: 'Asia', country: 'Singapore', provider: 'OVH SAS' },
+  { id: '117', name: 'Coha05', region: 'Europe', country: 'Austria', provider: 'IPAX GmbH' },
+  { id: '118', name: 'micto-snap', region: 'Europe', country: 'Austria', provider: 'Unknown' },
+  { id: '119', name: 'NodeSync', region: 'Europe', country: 'Austria', provider: 'Unknown' },
+  { id: '120', name: 'StorySaya', region: 'Europe', country: 'Austria', provider: 'Unknown' },
+  { id: '121', name: 'EquinoxDao', region: 'Europe', country: 'Austria', provider: 'Unknown' },
+  { id: '122', name: 'DeSpread', region: 'Europe', country: 'Austria', provider: 'netcup GmbH' },
+  { id: '123', name: 'Everstake', region: 'Europe', country: 'France', provider: 'OVH SAS' },
+  { id: '124', name: 'Nodes.Guru', region: 'Europe', country: 'France', provider: 'OVH SAS' },
+  { id: '125', name: 'ST-SERVER', region: 'Europe', country: 'France', provider: 'OVH SAS' },
+  { id: '126', name: 'vacamare', region: 'Europe', country: 'France', provider: 'OVH SAS' },
+  { id: '127', name: 'Cryptomolot', region: 'Europe', country: 'France', provider: 'OVH SAS' },
+  { id: '128', name: 'HusoNode', region: 'Europe', country: 'Poland', provider: 'MEVSPACE sp. z o.o.' },
+  { id: '129', name: 'OshVanK', region: 'Europe', country: 'Poland', provider: 'MEVSPACE sp. z o.o.' },
+  { id: '130', name: 'testnetnodes', region: 'Europe', country: 'Poland', provider: 'MEVSPACE sp. z o.o.' },
+  { id: '131', name: 'Grand', region: 'Europe', country: 'Poland', provider: 'OVH SAS' },
+  { id: '132', name: 'Vitwit', region: 'Europe', country: 'Poland', provider: 'OVH SAS' },
+  { id: '133', name: '0xjams', region: 'Europe', country: 'United Kingdom', provider: 'AS-CHOOPA' },
+  { id: '134', name: 'blockscout_node_1', region: 'Europe', country: 'United Kingdom', provider: 'NL-811-40021' },
+  { id: '135', name: 'b-aeneid-s0', region: 'Europe', country: 'United Kingdom', provider: 'Netwise Hosting Ltd' },
+  { id: '136', name: 'Pro-Nodes75_testnet_archive', region: 'Europe', country: 'United Kingdom', provider: 'OVH SAS' },
+  { id: '137', name: 'R1BXiJB3Uy', region: 'Europe', country: 'United Kingdom', provider: 'OVH SAS' },
+  { id: '138', name: 'Pro-Nodes75_testnet', region: 'North America', country: 'Canada', provider: 'DIGITALOCEAN-ASN' },
+  { id: '139', name: 'Relay1', region: 'North America', country: 'Canada', provider: 'OVH SAS' },
+  { id: '140', name: 'HashBamboo', region: 'Europe', country: 'Belgium', provider: 'GOOGLE-CLOUD-PLATFORM' },
+  { id: '141', name: 'ts-test-01', region: 'Asia', country: 'Hong Kong', provider: 'Scloud Pte Ltd' },
+  { id: '142', name: 'piki-nodes', region: 'Europe', country: 'Ireland', provider: 'euNetworks GmbH' },
+  { id: '143', name: 'story-001-stg', region: 'Europe', country: 'Lithuania', provider: 'Informacines sistemos ir technologijos, UAB' },
+  { id: '144', name: 'MiawLabs', region: 'Asia', country: 'Taiwan', provider: 'Asia Pacific Broadband Fixed Lines Co., Ltd.' }
+];
+
+const createValidatorsData = (): Validator[] => {
+  return validatorsData.map((v, idx) => {
+    const [baseLat, baseLng] = countryCoordinates[v.country] || [0, 0];
+    const [lat, lng] = getOffsetCoordinates(baseLat, baseLng);
+    return {
+      ...v,
+      lat,
+      lng,
+      status: 'active', // or use real status if available
+      performance: 98 + Math.random() * 2 // random performance for demo
+    };
   });
+};
 
-  // Memoize node generation to prevent recalculation on every render
-  const generateNodes = useMemo(() => {
-    return () => {
-      return validators.map((validator, index) => {
-        let x, y;
-        if (viewType === 'geographic') {
-          // For geographic view, coordinates will be handled by Mapbox markers, so assign dummy values
-          x = 0;
-          y = 0;
-        } else if (viewType === 'clusters') {
-          const performanceGroup = Math.floor(validator.performanceScore / 20);
-          const angle = (index / validators.length) * 2 * Math.PI;
-          const radius = 120 + performanceGroup * 60;
-          x = Math.cos(angle) * radius;
-          y = Math.sin(angle) * radius;
-        } else {
-          // Enhanced circular layout for network
-          const layers = Math.ceil(Math.sqrt(validators.length));
-          const layer = Math.floor(index / layers);
-          const posInLayer = index % layers;
-          const angle = (posInLayer / layers) * 2 * Math.PI + (layer * 0.5);
-          const radius = 150 + layer * 80;
-          x = Math.cos(angle) * radius + (Math.random() - 0.5) * 30;
-          y = Math.sin(angle) * radius + (Math.random() - 0.5) * 30;
+// Create glowing icon function
+const createGlowingIcon = (color: string) => {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `
+      <div class="marker-pin" style="
+        width: 12px;
+        height: 12px;
+        background: ${color};
+        border-radius: 50%;
+        box-shadow: 0 0 10px ${color}, 0 0 20px ${color}40;
+        animation: pulse 2s infinite;
+      "></div>
+    `,
+    iconSize: [12, 12],
+    iconAnchor: [6, 6],
+  });
+};
+
+const NetworkVisualization = () => {
+  const [validators] = useState<Validator[]>(createValidatorsData());
+
+  // Calculate statistics
+  const totalValidators = validators.length;
+  const activeValidators = validators.filter(v => v.status === 'active').length;
+  const averagePerformance = (validators.reduce((acc, v) => acc + v.performance, 0) / totalValidators).toFixed(1);
+
+  // Group validators by region
+  const validatorsByRegion = validators.reduce((acc, v) => {
+    acc[v.region] = (acc[v.region] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Calculate top validators
+  const topValidators = useMemo(() => 
+    validators
+      .sort((a, b) => b.performance - a.performance)
+      .slice(0, 5)
+      .map(v => ({
+        id: v.id,
+        name: v.name,
+        performance: v.performance,
+        stake: `${(Math.random() * 1000 + 500).toFixed(0)}K` // Mock stake data
+      })), [validators]);
+
+  const getValidatorColor = (status: string, performance: number): string => {
+    if (status === 'slashed') return '#ef4444';
+    if (performance > 95) return '#10b981';
+    if (performance > 90) return '#3b82f6';
+    if (performance > 85) return '#8b5cf6';
+    return '#f59e0b';
+  };
+
+  // Mock data for charts
+  const activityData = {
+    dates: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    events: [120, 132, 101, 134, 90, 230, 210],
+    performance: [98.5, 97.8, 99.1, 98.7, 96.5, 98.9, 99.2],
+    uptime: [99.9, 99.8, 99.9, 99.7, 99.8, 99.9, 100],
+  };
+
+  const statusData = [
+    { 
+      value: 100, 
+      name: 'Active',
+      itemStyle: { 
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: '#10b981' },
+          { offset: 1, color: '#059669' }
+        ])
+      }
+    },
+    { 
+      value: 20, 
+      name: 'Inactive',
+      itemStyle: { 
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: '#6b7280' },
+          { offset: 1, color: '#4b5563' }
+        ])
+      }
+    },
+    { 
+      value: 3, 
+      name: 'Slashed',
+      itemStyle: { 
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: '#ef4444' },
+          { offset: 1, color: '#dc2626' }
+        ])
+      }
+    }
+  ];
+
+  const eventTypes = [
+    { name: 'Proposals', value: 85, color: '#8b5cf6' },
+    { name: 'Attestations', value: 92, color: '#3b82f6' },
+    { name: 'Sync', value: 78, color: '#10b981' }
+  ];
+
+  const recentEvents: RecentEvent[] = [
+    { id: 1, type: 'Proposal', validator: 'Validator Alpha', time: '2m ago', status: 'success' },
+    { id: 2, type: 'Attestation', validator: 'Validator Beta', time: '5m ago', status: 'success' },
+    { id: 3, type: 'Sync', validator: 'Validator Gamma', time: '8m ago', status: 'warning' },
+    { id: 4, type: 'Proposal', validator: 'Validator Delta', time: '12m ago', status: 'success' },
+    { id: 5, type: 'Attestation', validator: 'Validator Epsilon', time: '15m ago', status: 'error' },
+  ];
+
+  const performanceTrendData = {
+    times: ['12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'],
+    values: [96.5, 97.8, 98.2, 97.5, 98.8, 99.1, 98.7],
+    target: Array(7).fill(98)
+  };
+
+  // Chart Options
+  const activityChartOption = {
+    grid: {
+      top: 30,
+      right: 8,
+      bottom: 24,
+      left: 36,
+      containLabel: true
+    },
+    legend: {
+      data: ['Events', 'Performance', 'Uptime'],
+      textStyle: { color: '#94a3b8' },
+      top: 0,
+      right: 0,
+      itemWidth: 8,
+      itemHeight: 8
+    },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(30, 41, 59, 0.95)',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      textStyle: { color: '#fff' }
+    },
+    xAxis: {
+      type: 'category',
+      data: activityData.dates,
+      axisLabel: { color: '#94a3b8', fontSize: 10 },
+      axisLine: { lineStyle: { color: '#334155' } }
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: 'Events',
+        nameTextStyle: { color: '#94a3b8', fontSize: 10 },
+        axisLabel: { color: '#94a3b8', fontSize: 10 },
+        splitLine: { lineStyle: { color: '#334155', type: 'dashed' } }
+      },
+      {
+        type: 'value',
+        name: 'Percentage',
+        nameTextStyle: { color: '#94a3b8', fontSize: 10 },
+        min: 95,
+        max: 100,
+        axisLabel: { color: '#94a3b8', fontSize: 10, formatter: '{value}%' },
+        splitLine: { show: false }
+      }
+    ],
+    series: [
+      {
+        name: 'Events',
+        type: 'bar',
+        data: activityData.events,
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(139, 92, 246, 0.8)' },
+            { offset: 1, color: 'rgba(139, 92, 246, 0.3)' }
+          ])
         }
-        
-        return {
-          id: validator.address,
-          name: validator.name,
-          x,
-          y,
-          size: Math.max(8, Math.min(25, (validator.stake / 5000000) * 12)),
-          performance: validator.performanceScore,
-          status: validator.status,
-          connections: Math.floor(Math.random() * 6) + 3,
-          region: validator.region || 'Unknown',
-          uptime: validator.uptime,
-          stake: validator.stake,
-          commission: validator.commission,
-          pulsePhase: Math.random() * Math.PI * 2,
-        };
-      });
-    };
-  }, [validators, viewType]);
-
-  const [nodes, setNodes] = useState<Node[]>([]);
-
-  useEffect(() => {
-    setNodes(generateNodes());
-  }, [generateNodes]);
-
-  const regionCoords: { [key: string]: { lat: number; lng: number } } = {
-    'North America': { lat: 39.8283, lng: -98.5795 },
-    'Europe': { lat: 54.5260, lng: 15.2551 },
-    'Asia': { lat: 34.0479, lng: 100.6197 },
-    'Africa': { lat: -8.7832, lng: 34.5085 },
-    'South America': { lat: -14.2350, lng: -51.9253 },
-    'Australia': { lat: -25.2744, lng: 133.7751 },
+      },
+      {
+        name: 'Performance',
+        type: 'line',
+        yAxisIndex: 1,
+        data: activityData.performance,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2, color: '#10b981' },
+        itemStyle: { color: '#10b981' }
+      },
+      {
+        name: 'Uptime',
+        type: 'line',
+        yAxisIndex: 1,
+        data: activityData.uptime,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2, color: '#3b82f6' },
+        itemStyle: { color: '#3b82f6' }
+      }
+    ]
   };
 
-  const getNodeColor = (node: Node) => {
-    if (node.status === 'slashed') return { primary: '#ef4444', secondary: '#fca5a5' };
-    if (node.performance > 95) return { primary: '#10b981', secondary: '#6ee7b7' };
-    if (node.performance > 90) return { primary: '#3b82f6', secondary: '#93c5fd' };
-    if (node.performance > 85) return { primary: '#8b5cf6', secondary: '#c4b5fd' };
-    return { primary: '#f59e0b', secondary: '#fcd34d' };
-  };
-
-  const drawNetwork = (time: number = 0) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Clear canvas with dark background
-    ctx.fillStyle = '#0f0f23';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Add subtle grid pattern
-    ctx.strokeStyle = 'rgba(139, 92, 246, 0.05)';
-    ctx.lineWidth = 1;
-    const gridSize = 50 * zoom;
-    for (let x = (offset.x % gridSize); x < canvas.width; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-    for (let y = (offset.y % gridSize); y < canvas.height; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
-
-    ctx.save();
-    ctx.translate(canvas.width / 2 + offset.x, canvas.height / 2 + offset.y);
-    ctx.scale(zoom, zoom);
-
-    // Draw connections with enhanced styling
-    if (viewType === 'network') {
-      nodes.forEach((node, i) => {
-        for (let j = 0; j < Math.min(node.connections, 4); j++) {
-          const targetIndex = (i + j + 1) % nodes.length;
-          const target = nodes[targetIndex];
-          
-          const gradient = ctx.createLinearGradient(node.x, node.y, target.x, target.y);
-          const colors = getNodeColor(node);
-          gradient.addColorStop(0, colors.primary + '40');
-          gradient.addColorStop(0.5, colors.primary + '20');
-          gradient.addColorStop(1, getNodeColor(target).primary + '40');
-          
-          ctx.strokeStyle = gradient;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(node.x, node.y);
-          ctx.lineTo(target.x, target.y);
-          ctx.stroke();
+  const statusChartOption = {
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(30, 41, 59, 0.95)',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      textStyle: { color: '#fff' }
+    },
+    series: [{
+      type: 'pie',
+      radius: ['50%', '70%'],
+      center: ['50%', '50%'],
+      avoidLabelOverlap: true,
+      itemStyle: {
+        borderColor: '#1e293b',
+        borderWidth: 2
+      },
+      label: {
+        show: true,
+        position: 'outside',
+        formatter: '{b}\n{d}%',
+        color: '#94a3b8'
+      },
+      emphasis: {
+        label: {
+          show: true,
+          fontSize: 12,
+          fontWeight: 'bold'
         }
-      });
-    }
+      },
+      data: statusData
+    }]
+  };
 
-    // Draw nodes with enhanced styling
-    nodes.forEach((node) => {
-      const colors = getNodeColor(node);
-      const isSelected = selectedValidator === node.id;
-      const isHovered = hoveredValidator === node.id;
-      
-      // Animated pulse for active nodes
-      if (node.status === 'active') {
-        const pulseIntensity = Math.sin(time * 0.003 + node.pulsePhase) * 0.3 + 0.7;
-        const pulseSize = node.size + (Math.sin(time * 0.005 + node.pulsePhase) * 3);
-        
-        // Outer glow
-        const glowGradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, pulseSize + 15);
-        glowGradient.addColorStop(0, colors.primary + Math.floor(pulseIntensity * 40).toString(16).padStart(2, '0'));
-        glowGradient.addColorStop(0.7, colors.primary + '20');
-        glowGradient.addColorStop(1, colors.primary + '00');
-        
-        ctx.fillStyle = glowGradient;
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, pulseSize + 15, 0, 2 * Math.PI);
-        ctx.fill();
+  const performanceTrendOption = {
+    grid: {
+      top: 15,
+      right: 5,
+      bottom: 20,
+      left: 30,
+      containLabel: true
+    },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(30, 41, 59, 0.95)',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      textStyle: { color: '#fff' }
+    },
+    xAxis: {
+      type: 'category',
+      data: performanceTrendData.times,
+      axisLabel: { color: '#94a3b8', fontSize: 10 },
+      axisLine: { lineStyle: { color: '#334155' } }
+    },
+    yAxis: {
+      type: 'value',
+      min: 95,
+      max: 100,
+      axisLabel: { color: '#94a3b8', fontSize: 10, formatter: '{value}%' },
+      splitLine: { lineStyle: { color: '#334155', type: 'dashed' } }
+    },
+    series: [
+      {
+        type: 'line',
+        data: performanceTrendData.values,
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        lineStyle: { width: 2, color: '#8b5cf6' },
+        itemStyle: { color: '#8b5cf6' },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(139, 92, 246, 0.2)' },
+            { offset: 1, color: 'rgba(139, 92, 246, 0)' }
+          ])
+        }
+      },
+      {
+        type: 'line',
+        data: performanceTrendData.target,
+        lineStyle: { type: 'dashed', width: 1, color: '#475569' },
+        symbol: 'none'
       }
-
-      // Main node with gradient
-      const nodeGradient = ctx.createRadialGradient(
-        node.x - node.size * 0.3, 
-        node.y - node.size * 0.3, 
-        0, 
-        node.x, 
-        node.y, 
-        node.size
-      );
-      nodeGradient.addColorStop(0, colors.secondary);
-      nodeGradient.addColorStop(0.7, colors.primary);
-      nodeGradient.addColorStop(1, colors.primary + 'cc');
-
-      ctx.fillStyle = nodeGradient;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, node.size, 0, 2 * Math.PI);
-      ctx.fill();
-
-      // Node border
-      ctx.strokeStyle = isSelected || isHovered ? '#ffffff' : colors.primary;
-      ctx.lineWidth = isSelected ? 4 : isHovered ? 3 : 2;
-      ctx.beginPath();
-      ctx.arc(node.x, node.y, node.size, 0, 2 * Math.PI);
-      ctx.stroke();
-
-      // Performance indicator ring
-      if (node.performance > 0) {
-        const ringRadius = node.size + 5;
-        const performanceAngle = (node.performance / 100) * 2 * Math.PI;
-        
-        ctx.strokeStyle = colors.secondary;
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, ringRadius, -Math.PI / 2, -Math.PI / 2 + performanceAngle);
-        ctx.stroke();
-      }
-
-      // Status indicator
-      if (node.status === 'slashed') {
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.arc(node.x + node.size * 0.6, node.y - node.size * 0.6, 4, 0, 2 * Math.PI);
-        ctx.fill();
-      }
-
-      // Node label for larger nodes or selected/hovered
-      if (node.size > 15 || isSelected || isHovered) {
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '12px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(
-          node.name.length > 10 ? node.name.substring(0, 10) + '...' : node.name,
-          node.x,
-          node.y + node.size + 15
-        );
-      }
-    });
-
-    ctx.restore();
+    ]
   };
 
-  const animate = (time: number) => {
-    drawNetwork(time);
-    animationRef.current = requestAnimationFrame(animate);
+  const gaugeOptions = {
+    series: eventTypes.map((event, index) => ({
+      type: 'gauge',
+      center: ['50%', `${25 + (index * 25)}%`],
+      radius: '20%',
+      startAngle: 90,
+      endAngle: -270,
+      pointer: { show: false },
+      progress: {
+        show: true,
+        overlap: false,
+        roundCap: true,
+        clip: false,
+        itemStyle: { color: event.color }
+      },
+      axisLine: {
+        lineStyle: {
+          width: 8,
+          color: [[1, 'rgba(255, 255, 255, 0.1)']]
+        }
+      },
+      splitLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { show: false },
+      title: {
+        fontSize: 10,
+        color: '#94a3b8',
+        offsetCenter: [0, '20%']
+      },
+      detail: {
+        fontSize: 14,
+        color: event.color,
+        offsetCenter: [0, 0],
+        formatter: '{value}%'
+      },
+      data: [{ value: event.value, name: event.name }]
+    }))
   };
-
-  useEffect(() => {
-    animationRef.current = requestAnimationFrame(animate);
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, [zoom, offset, selectedValidator, hoveredValidator, viewType, nodes]);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    setLastMousePos({ x: e.clientX, y: e.clientY });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left - canvas.width / 2 - offset.x) / zoom;
-    const y = (e.clientY - rect.top - canvas.height / 2 - offset.y) / zoom;
-
-    // Check for hovered node
-    const hoveredNode = nodes.find((node) => {
-      const distance = Math.sqrt((x - node.x) ** 2 + (y - node.y) ** 2);
-      return distance <= node.size + 5;
-    });
-
-    setHoveredValidator(hoveredNode ? hoveredNode.id : null);
-
-    if (isDragging) {
-      const deltaX = e.clientX - lastMousePos.x;
-      const deltaY = e.clientY - lastMousePos.y;
-      setOffset((prev) => {
-        const newOffset = { x: prev.x + deltaX, y: prev.y + deltaY };
-        return {
-          x: Math.max(-canvas.width, Math.min(canvas.width, newOffset.x)),
-          y: Math.max(-canvas.height, Math.min(canvas.height, newOffset.y)),
-        };
-      });
-      setLastMousePos({ x: e.clientX, y: e.clientY });
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  const handleCanvasClick = (e: React.MouseEvent) => {
-    if (isDragging || !canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left - canvas.width / 2 - offset.x) / zoom;
-    const y = (e.clientY - rect.top - canvas.height / 2 - offset.y) / zoom;
-
-    const clickedNode = nodes.find((node) => {
-      const distance = Math.sqrt((x - node.x) ** 2 + (y - node.y) ** 2);
-      return distance <= node.size + 5;
-    });
-
-    setSelectedValidator(clickedNode ? clickedNode.id : null);
-  };
-
-  const resetView = () => {
-    setZoom(1);
-    setOffset({ x: 0, y: 0 });
-    setSelectedValidator(null);
-    setHoveredValidator(null);
-  };
-
-  const zoomIn = () => setZoom((prev) => Math.min(prev * 1.2, 3));
-  const zoomOut = () => setZoom((prev) => Math.max(prev / 1.2, 0.3));
-
-  useEffect(() => {
-    const handleResize = () => {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
-      }
-    };
-
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const selectedValidatorData = selectedValidator
-    ? validators.find((v) => v.address === selectedValidator)
-    : null;
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen p-6 flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-4">Loading Network</h2>
-          <p className="text-gray-400">Fetching validator network data...</p>
-        </Card>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen p-6 flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        <Card className="p-8 bg-white/5 backdrop-blur-lg border-white/10 text-center">
-          <h2 className="text-2xl font-bold text-white mb-4">Error Loading Network</h2>
-          <p className="text-gray-400">Failed to fetch network data. Please try again later.</p>
-        </Card>
-      </div>
-    );
-  }
 
   return (
-    <>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.1); opacity: 0.8; }
-        }
-        .mapbox-marker {
-          animation: pulse 2s infinite;
-        }
-      `}</style>
-      <div className="min-h-screen p-6 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        <div className="max-w-7xl mx-auto space-y-8">
-          {/* Header */}
-          <div className="text-center space-y-4">
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Network Visualization
-            </h1>
-            <p className="text-xl text-gray-300">Interactive view of validator network topology</p>
-          </div>
+    <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-2">
+      {/* Top Bar */}
+      <div className="flex justify-between items-center mb-2 h-[40px]">
+        <div className="flex items-center gap-3">
+          {/* TODO: Add logo if needed */}
+          <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Story Testnet Network Dashboard</span>
+        </div>
+        <div className="text-gray-400 text-sm">{new Date().toLocaleString()}</div>
+      </div>
 
-          {/* Controls */}
-          <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
-            <div className="flex flex-col md:flex-row gap-6 justify-between items-center">
-              <div>
-                <h3 className="text-white font-medium mb-3">View Type</h3>
-                <div className="flex gap-2">
-                  {(['network', 'geographic', 'clusters'] as const).map((type) => (
-                    <Button
-                      key={type}
-                      variant={viewType === type ? 'default' : 'outline'}
-                      onClick={() => setViewType(type)}
-                      className={
-                        viewType === type
-                          ? 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
-                          : 'border-white/20 text-gray-300 hover:bg-white/10'
-                      }
-                      aria-pressed={viewType === type}
-                    >
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
-                    </Button>
-                  ))}
+      {/* Main Dashboard Grid */}
+      <div className="grid grid-cols-12 gap-2 h-[calc(100vh-50px)]">
+        {/* Left Panel */}
+        <div className="col-span-12 md:col-span-2 flex flex-col gap-2">
+          <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
+            <ReactECharts option={activityChartOption} style={{ height: '100%' }} theme="dark" />
+          </Card>
+          <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
+            <ReactECharts option={statusChartOption} style={{ height: '100%' }} theme="dark" />
+          </Card>
+          <Card className="bg-white/5 border-white/10 p-2 flex-1">
+            <div className="text-white text-sm font-medium mb-2">Top Validators</div>
+            <div className="space-y-2">
+              {topValidators.map((validator, index) => (
+                <div
+                  key={validator.id}
+                  className="bg-white/5 rounded-lg p-2 hover:bg-white/10 transition-colors"
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-gray-400">#{index + 1}</div>
+                      <div className="text-sm text-gray-200">{validator.name}</div>
+                    </div>
+                    <div className="text-xs text-gray-400">{validator.stake}</div>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <div className="h-1 flex-1 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-purple-500"
+                        style={{ width: `${validator.performance}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-gray-400">{validator.performance}%</div>
+                  </div>
                 </div>
-              </div>
-
-              {viewType !== 'geographic' && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={zoomIn}
-                    className="border-white/20 text-gray-300 hover:bg-white/10"
-                    aria-label="Zoom in"
-                  >
-                    <ZoomIn className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={zoomOut}
-                    className="border-white/20 text-gray-300 hover:bg-white/10"
-                    aria-label="Zoom out"
-                  >
-                    <ZoomOut className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={resetView}
-                    className="border-white/20 text-gray-300 hover:bg-white/10"
-                    aria-label="Reset view"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
+              ))}
             </div>
           </Card>
+        </div>
 
-          {/* Network Canvas / Map */}
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            <Card className="lg:col-span-3 p-6 bg-white/5 backdrop-blur-lg border-white/10">
-              {viewType === 'geographic' && (
-                <div className="w-full h-[600px] rounded-xl overflow-hidden border border-white/10 mb-8">
-                  <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
-                    <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    />
-                    {nodes.map((node) => {
-                      const coords = regionCoords[node.region] || { lat: 0, lng: 0 };
-                      return (
-                        <Marker key={node.id} position={[coords.lat, coords.lng]}>
-                          <Popup>
-                            <div className="text-sm">
-                              <div className="font-bold text-purple-400">{node.name}</div>
-                              <div className="text-gray-300">Status: <span className="font-semibold">{node.status}</span></div>
-                              <div className="text-gray-300">Stake: <span className="font-semibold">{node.stake.toLocaleString()} IP</span></div>
-                              <div className="text-gray-300">Uptime: <span className="font-semibold">{(node.uptime * 100).toFixed(2)}%</span></div>
-                              <div className="text-gray-300">Commission: <span className="font-semibold">{node.commission.toFixed(2)}%</span></div>
-                              <div className="text-gray-300">Region: <span className="font-semibold">{node.region}</span></div>
-                            </div>
-                          </Popup>
-                        </Marker>
-                      );
-                    })}
-                  </MapContainer>
-                </div>
-              )}
-
-              {/* Enhanced Legend */}
-              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-green-400 to-emerald-400"></div>
-                  <span className="text-xs text-gray-400">Excellent (95%+)</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-blue-400 to-cyan-400"></div>
-                  <span className="text-xs text-gray-400">Good (90-95%)</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-purple-400 to-pink-400"></div>
-                  <span className="text-xs text-gray-400">Fair (85-90%)</span>
-                </div>
-                <div className="flex flex-col items-center gap-2">
-                  <div className="w-4 h-4 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400"></div>
-                  <span className="text-xs text-gray-400">Poor (Less than 85%)</span>
-                </div>
-              </div>
+        {/* Center Panel (Map + Top Stats) */}
+        <div className="col-span-12 md:col-span-8 flex flex-col gap-2">
+          {/* Top Stats */}
+          <div className="grid grid-cols-4 gap-2">
+            <Card className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/20 p-2 text-center">
+              <div className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">{validators.length}</div>
+              <div className="text-gray-400 text-xs">Total Validators</div>
             </Card>
-
-            {/* Enhanced Node Details */}
-            <Card className="p-6 bg-white/5 backdrop-blur-lg border-white/10">
-              <h3 className="text-xl font-semibold text-white mb-4">Node Details</h3>
-              {selectedValidatorData ? (
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="text-white font-medium">{selectedValidatorData.name}</h4>
-                    <p className="text-xs text-gray-400 font-mono break-all">
-                      {selectedValidatorData.address}
-                    </p>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Performance</span>
-                      <span className="text-white font-medium">{selectedValidatorData.performanceScore.toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Uptime</span>
-                      <span className="text-white font-medium">{(selectedValidatorData.uptime * 100).toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Stake</span>
-                      <span className="text-white font-medium">{(selectedValidatorData.stake / 1000000).toFixed(1)}M</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Commission</span>
-                      <span className="text-white font-medium">{selectedValidatorData.commission.toFixed(1)}%</span>
-                    </div>
-                  </div>
-                  <Badge
-                    className={
-                      selectedValidatorData.status === 'active'
-                        ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                        : selectedValidatorData.status === 'slashed' 
-                          ? 'bg-red-500/20 text-red-400 border-red-500/30'
-                          : 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-                    }
+            <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20 p-2 text-center">
+              <div className="text-xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+                {validators.filter(v => v.status === 'active').length}
+              </div>
+              <div className="text-gray-400 text-xs">Active</div>
+            </Card>
+            <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/20 p-2 text-center">
+              <div className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                {new Set(validators.map(v => v.region)).size}
+              </div>
+              <div className="text-gray-400 text-xs">Regions</div>
+            </Card>
+            <Card className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/20 p-2 text-center">
+              <div className="text-xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
+                {(validators.reduce((acc, v) => acc + v.performance, 0) / validators.length).toFixed(1)}%
+              </div>
+              <div className="text-gray-400 text-xs">Avg Performance</div>
+            </Card>
+          </div>
+          {/* World Map Visualization */}
+          <Card className="bg-white/5 border-white/10 p-2 flex-1 overflow-hidden">
+            <style>{`
+              .leaflet-container {
+                background: #0f172a;
+                height: 100%;
+                width: 100%;
+                border-radius: 0.5rem;
+              }
+              .leaflet-tile {
+                filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+              }
+              @keyframes pulse {
+                0% { transform: scale(1); opacity: 1; }
+                50% { transform: scale(1.3); opacity: 0.7; }
+                100% { transform: scale(1); opacity: 1; }
+              }
+              .custom-marker {
+                animation: pulse 2s infinite;
+              }
+              .leaflet-popup-content-wrapper {
+                background: rgba(30, 41, 59, 0.95);
+                color: #fff;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(8px);
+              }
+              .leaflet-popup-tip {
+                background: rgba(30, 41, 59, 0.95);
+              }
+            `}</style>
+            <MapContainer
+              center={[45, 10]}
+              zoom={3}
+              minZoom={2}
+              maxZoom={18}
+              scrollWheelZoom={true}
+              style={{ height: '100%', width: '100%', background: '#0f172a' }}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {validators.map((validator) => {
+                const [baseLat, baseLng] = countryCoordinates[validator.country] || [0, 0];
+                const latOffset = (Math.random() - 0.5) * 4;
+                const lngOffset = (Math.random() - 0.5) * 4;
+                return (
+                  <Marker
+                    key={validator.id}
+                    position={[baseLat + latOffset, baseLng + lngOffset]}
+                    icon={createGlowingIcon(getValidatorColor(validator.status, validator.performance))}
                   >
-                    {selectedValidatorData.status}
-                  </Badge>
-                </div>
-              ) : (
-                <p className="text-gray-400">
-                  {viewType === 'geographic' 
-                    ? 'Click on a marker to view details' 
-                    : 'Click on a node to view details'
-                  }
-                </p>
-              )}
-            </Card>
-          </div>
+                    <Popup>
+                      <div className="p-2">
+                        <h3 className="font-bold text-white mb-2">{validator.name}</h3>
+                        <div className="text-sm space-y-1">
+                          <p className="text-gray-300">Region: <span className="text-white">{validator.region}</span></p>
+                          <p className="text-gray-300">Country: <span className="text-white">{validator.country}</span></p>
+                          <p className="text-gray-300">Provider: <span className="text-white">{validator.provider}</span></p>
+                          <p className="text-gray-300">Status: <span className="text-white">{validator.status}</span></p>
+                          <p className="text-gray-300">Performance: <span className="text-white">{validator.performance}%</span></p>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
+            </MapContainer>
+          </Card>
+        </div>
 
-          {/* Enhanced Network Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card className="p-6 bg-gradient-to-br from-purple-500/10 to-pink-500/10 backdrop-blur-lg border-purple-500/20">
-              <div className="text-center">
-                <p className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
-                  {nodes.length}
-                </p>
-                <p className="text-gray-400">Total Nodes</p>
-              </div>
-            </Card>
-            <Card className="p-6 bg-gradient-to-br from-green-500/10 to-emerald-500/10 backdrop-blur-lg border-green-500/20">
-              <div className="text-center">
-                <p className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-                  {nodes.filter((n) => n.status === 'active').length}
-                </p>
-                <p className="text-gray-400">Active Nodes</p>
-              </div>
-            </Card>
-            <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 backdrop-blur-lg border-blue-500/20">
-              <div className="text-center">
-                <p className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                  {(nodes.reduce((sum, n) => sum + n.connections, 0) / 2).toFixed(0)}
-                </p>
-                <p className="text-gray-400">Connections</p>
-              </div>
-            </Card>
-            <Card className="p-6 bg-gradient-to-br from-yellow-500/10 to-orange-500/10 backdrop-blur-lg border-yellow-500/20">
-              <div className="text-center">
-                <p className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
-                  {nodes.length > 0 ? (nodes.reduce((sum, n) => sum + n.performance, 0) / nodes.length).toFixed(1) : '0'}
-                </p>
-                <p className="text-gray-400">Avg Performance</p>
-              </div>
-            </Card>
-          </div>
+        {/* Right Panel */}
+        <div className="col-span-12 md:col-span-2 flex flex-col gap-2">
+          <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
+            <ReactECharts option={gaugeOptions} style={{ height: '100%' }} theme="dark" />
+          </Card>
+          <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
+            <ReactECharts option={performanceTrendOption} style={{ height: '100%' }} theme="dark" />
+          </Card>
+          <Card className="bg-white/5 border-white/10 p-2 flex-1">
+            <div className="text-white text-sm font-medium mb-2">Recent Events</div>
+            <div className="space-y-2 overflow-auto max-h-[calc(100%-2rem)]">
+              {recentEvents.map((event) => (
+                <div
+                  key={event.id}
+                  className="bg-white/5 rounded-lg p-2 hover:bg-white/10 transition-colors border border-transparent hover:border-white/10"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${
+                        event.status === 'success' ? 'bg-emerald-500' :
+                        event.status === 'warning' ? 'bg-yellow-500' :
+                        'bg-red-500'
+                      }`} />
+                      <div className="text-sm text-gray-200">{event.type}</div>
+                    </div>
+                    <div className="text-xs text-gray-400">{event.time}</div>
+                  </div>
+                  <div className="mt-1 text-xs text-gray-400">{event.validator}</div>
+                </div>
+              ))}
+            </div>
+          </Card>
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
