@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -6,6 +6,7 @@ import L from 'leaflet';
 import * as echarts from 'echarts';
 import ReactECharts from 'echarts-for-react';
 import 'leaflet/dist/leaflet.css';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 
 // Fix Leaflet default markers
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -26,6 +27,8 @@ interface Validator {
   region: string;
   country: string;
   provider: string;
+  latOffset: number;
+  lngOffset: number;
 }
 
 interface TopValidator {
@@ -41,6 +44,15 @@ interface RecentEvent {
   validator: string;
   time: string;
   status: 'success' | 'warning' | 'error';
+}
+
+interface BlockProposer {
+  moniker: string;
+  operatorAddress: string;
+  hexAddress: string;
+  avatar: string | null;
+  height: number;
+  time: string;
 }
 
 // Country coordinates mapping
@@ -70,7 +82,7 @@ const getOffsetCoordinates = (lat: number, lng: number): [number, number] => {
 };
 
 // Validators data from user
-const validatorsData: Omit<Validator, 'lat' | 'lng' | 'status' | 'performance'>[] = [
+const validatorsData = [
   { id: '1', name: 'bangpateng', region: 'Europe', country: 'Germany', provider: 'AMAZON-02' },
   { id: '2', name: 'OneNov', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
   { id: '3', name: 'Strivenode', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
@@ -220,11 +232,16 @@ const validatorsData: Omit<Validator, 'lat' | 'lng' | 'status' | 'performance'>[
 const createValidatorsData = (): Validator[] => {
   return validatorsData.map((v, idx) => {
     const [baseLat, baseLng] = countryCoordinates[v.country] || [0, 0];
-    const [lat, lng] = getOffsetCoordinates(baseLat, baseLng);
+    // Generate a stable random offset per validator
+    const seed = parseInt(v.id, 36) || idx;
+    const latOffset = ((Math.sin(seed) + 1) / 2 - 0.5) * 2; // deterministic pseudo-random
+    const lngOffset = ((Math.cos(seed) + 1) / 2 - 0.5) * 2;
     return {
       ...v,
-      lat,
-      lng,
+      lat: baseLat,
+      lng: baseLng,
+      latOffset,
+      lngOffset,
       status: 'active', // or use real status if available
       performance: 98 + Math.random() * 2 // random performance for demo
     };
@@ -257,6 +274,45 @@ const createGlowingIcon = (color: string, status: string) => {
 const NetworkVisualization = () => {
   const [validators] = useState<Validator[]>(createValidatorsData());
   const [mapboxToken, setMapboxToken] = useState('');
+  const [latestProposers, setLatestProposers] = useState<BlockProposer[]>([]);
+  const [loadingProposer, setLoadingProposer] = useState(false);
+  const [proposerError, setProposerError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    let interval: NodeJS.Timeout;
+    const fetchLatestProposer = async () => {
+      setLoadingProposer(true);
+      setProposerError(null);
+      try {
+        const res = await fetch('http://94.131.9.121:3001/api/blocks');
+        if (!res.ok) throw new Error('Failed to fetch latest block');
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          if (isMounted) {
+            setLatestProposers(data.slice(0, 3).map(block => ({
+              moniker: block.proposer.moniker || block.proposer.operatorAddress,
+              operatorAddress: block.proposer.operatorAddress,
+              hexAddress: block.proposer.hexAddress,
+              avatar: block.proposer.avatar,
+              height: block.height,
+              time: block.time,
+            })));
+          }
+        }
+      } catch (err: any) {
+        if (isMounted) setProposerError(err.message || 'Unknown error');
+      } finally {
+        if (isMounted) setLoadingProposer(false);
+      }
+    };
+    fetchLatestProposer();
+    interval = setInterval(fetchLatestProposer, 2000); // Poll every 2 seconds
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Calculate statistics
   const totalValidators = validators.length;
@@ -559,9 +615,20 @@ const NetworkVisualization = () => {
   };
 
   return (
-    <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-2">
+    <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-0 overflow-hidden">
+      <style>{`
+        @keyframes pulse-subtle {
+          0% { border-color: rgba(168, 85, 247, 0.2); }
+          50% { border-color: rgba(168, 85, 247, 0.4); }
+          100% { border-color: rgba(168, 85, 247, 0.2); }
+        }
+        .animate-pulse-subtle {
+          animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+      `}</style>
+      
       {/* Top Bar */}
-      <div className="flex justify-between items-center mb-2 h-[40px]">
+      <div className="flex justify-between items-center mb-2 h-[40px] px-2">
         <div className="flex items-center gap-3">
           <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Story Testnet Network Dashboard</span>
         </div>
@@ -577,42 +644,62 @@ const NetworkVisualization = () => {
       </div>
 
       {/* Main Dashboard Grid */}
-      <div className="grid grid-cols-12 gap-2 h-[calc(100vh-50px)]">
+      <div className="grid grid-cols-12 gap-2 h-[calc(100vh-50px)] overflow-hidden px-2">
         {/* Left Panel */}
         <div className="col-span-12 md:col-span-2 flex flex-col gap-2">
+          <Card className="bg-white/5 border-white/10 p-4 h-[280px] flex flex-col justify-between relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-white text-sm font-medium">Recent Block Proposers</div>
+              <div className="px-2 py-1 rounded-full bg-purple-500/20 border border-purple-500/30">
+                <span className="text-xs text-purple-300">Live</span>
+              </div>
+            </div>
+            {loadingProposer && latestProposers.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-gray-400">Loading...</div>
+              </div>
+            ) : proposerError ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-red-400">{proposerError}</div>
+              </div>
+            ) : latestProposers.length > 0 ? (
+              <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
+                {latestProposers.map((proposer, idx) => (
+                  <div
+                    key={proposer.height}
+                    className={`flex items-center gap-3 bg-white/5 rounded-lg p-2 transition-all duration-300 ${idx === 0 ? 'animate-pulse-subtle border border-purple-500/30' : ''}`}
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/30 to-pink-500/30 border border-purple-500/20 flex items-center justify-center text-sm font-bold text-purple-300">
+                      {proposer.moniker?.charAt(0) || '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-purple-300 truncate" title={proposer.moniker}>
+                        {proposer.moniker}
+                      </div>
+                      <div className="text-xs text-gray-400 truncate" title={proposer.operatorAddress}>
+                        {proposer.operatorAddress}
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <div className="text-xs text-gray-400">{new Date(proposer.time).toLocaleTimeString()}</div>
+                      <div className="text-[10px] text-gray-400 uppercase">Height:</div>
+                      <div className="text-sm font-medium text-white">{proposer.height.toLocaleString()}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-gray-400">No proposer data</div>
+              </div>
+            )}
+          </Card>
           <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
             <ReactECharts option={activityChartOption} style={{ height: '100%' }} theme="dark" />
           </Card>
           <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
             <ReactECharts option={statusChartOption} style={{ height: '100%' }} theme="dark" />
-          </Card>
-          <Card className="bg-white/5 border-white/10 p-2 flex-1">
-            <div className="text-white text-sm font-medium mb-2">Top Validators</div>
-            <div className="space-y-2">
-              {topValidators.map((validator, index) => (
-                <div
-                  key={validator.id}
-                  className="bg-white/5 rounded-lg p-2 hover:bg-white/10 transition-colors"
-                >
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                      <div className="text-xs text-gray-400">#{index + 1}</div>
-                      <div className="text-sm text-gray-200">{validator.name}</div>
-                    </div>
-                    <div className="text-xs text-gray-400">{validator.stake}</div>
-                  </div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <div className="h-1 flex-1 bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-purple-500"
-                        style={{ width: `${validator.performance}%` }}
-                      />
-                    </div>
-                    <div className="text-xs text-gray-400">{validator.performance}%</div>
-                  </div>
-                </div>
-              ))}
-            </div>
           </Card>
         </div>
 
@@ -654,7 +741,7 @@ const NetworkVisualization = () => {
                 z-index: 1;
               }
               .leaflet-tile {
-                filter: brightness(0.4) contrast(1.2) saturate(0.8);
+                filter: none;
               }
               .leaflet-control-container {
                 filter: invert(1);
@@ -690,58 +777,54 @@ const NetworkVisualization = () => {
               style={{ height: '100%', width: '100%' }}
             >
               <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+                url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
               />
-              {validators.map((validator) => {
-                const countryCoords = countryCoordinates[validator.country];
-                if (!countryCoords) return null;
-                
-                const [baseLat, baseLng] = countryCoords;
-                // Add small random offset to prevent exact overlap
-                const latOffset = (Math.random() - 0.5) * 2;
-                const lngOffset = (Math.random() - 0.5) * 2;
-                const finalLat = baseLat + latOffset;
-                const finalLng = baseLng + lngOffset;
-                
-                return (
-                  <Marker
-                    key={validator.id}
-                    position={[finalLat, finalLng]}
-                    icon={createGlowingIcon(getValidatorColor(validator.status, validator.performance), validator.status)}
-                  >
-                    <Popup maxWidth={300}>
-                      <div className="p-3 min-w-[250px]">
-                        <h3 className="font-bold text-white mb-2 text-lg">{validator.name}</h3>
-                        <div className="text-sm space-y-2">
-                          <div className="flex justify-between">
-                            <span className="text-gray-300">Region:</span>
-                            <span className="text-white font-medium">{validator.region}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-300">Country:</span>
-                            <span className="text-white font-medium">{validator.country}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-300">Provider:</span>
-                            <span className="text-white font-medium text-xs">{validator.provider}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-300">Status:</span>
-                            <span className={`font-medium ${validator.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>
-                              {validator.status}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-300">Performance:</span>
-                            <span className="text-white font-medium">{validator.performance.toFixed(1)}%</span>
+              <MarkerClusterGroup>
+                {validators.map((validator) => {
+                  const countryCoords = countryCoordinates[validator.country];
+                  if (!countryCoords) return null;
+                  const finalLat = validator.lat + validator.latOffset;
+                  const finalLng = validator.lng + validator.lngOffset;
+                  return (
+                    <Marker
+                      key={validator.id}
+                      position={[finalLat, finalLng]}
+                      icon={createGlowingIcon(getValidatorColor(validator.status, validator.performance), validator.status)}
+                    >
+                      <Popup maxWidth={300}>
+                        <div className="p-3 min-w-[250px]">
+                          <h3 className="font-bold text-white mb-2 text-lg">{validator.name}</h3>
+                          <div className="text-sm space-y-2">
+                            <div className="flex justify-between">
+                              <span className="text-gray-300">Region:</span>
+                              <span className="text-white font-medium">{validator.region}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-300">Country:</span>
+                              <span className="text-white font-medium">{validator.country}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-300">Provider:</span>
+                              <span className="text-white font-medium text-xs">{validator.provider}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-300">Status:</span>
+                              <span className={`font-medium ${validator.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>
+                                {validator.status}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-300">Performance:</span>
+                              <span className="text-white font-medium">{validator.performance.toFixed(1)}%</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </Popup>
-                  </Marker>
-                );
-              })}
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+              </MarkerClusterGroup>
             </MapContainer>
           </Card>
         </div>
