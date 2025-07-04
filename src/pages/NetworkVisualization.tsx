@@ -29,6 +29,7 @@ interface Validator {
   provider: string;
   latOffset: number;
   lngOffset: number;
+  operatorAddress?: string;
 }
 
 interface TopValidator {
@@ -83,8 +84,8 @@ const getOffsetCoordinates = (lat: number, lng: number): [number, number] => {
 
 // Validators data from user
 const validatorsData = [
-  { id: '1', name: 'bangpateng', region: 'Europe', country: 'Germany', provider: 'AMAZON-02' },
-  { id: '2', name: 'OneNov', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
+  { id: '1', name: 'bangpateng', region: 'Europe', country: 'Germany', provider: 'AMAZON-02', operatorAddress: 'op1' },
+  { id: '2', name: 'OneNov', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH', operatorAddress: 'op2' },
   { id: '3', name: 'Strivenode', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
   { id: '4', name: 'wansnode', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
   { id: '5', name: 'Winnode', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH' },
@@ -243,16 +244,17 @@ const createValidatorsData = (): Validator[] => {
       latOffset,
       lngOffset,
       status: 'active', // or use real status if available
-      performance: 98 + Math.random() * 2 // random performance for demo
+      performance: 98 + Math.random() * 2, // random performance for demo
+      operatorAddress: v.operatorAddress || v.id // fallback to id if not present
     };
   });
 };
 
 // Create glowing icon function
-const createGlowingIcon = (color: string, status: string) => {
+const createGlowingIcon = (color: string, status: string, highlight: boolean = false) => {
   const size = status === 'active' ? 12 : 8;
   return L.divIcon({
-    className: 'custom-marker',
+    className: `custom-marker ${highlight ? 'animate-pulse-subtle' : ''}`,
     html: `
       <div style="
         width: ${size}px;
@@ -317,6 +319,8 @@ const NetworkVisualization = () => {
   // Calculate statistics
   const totalValidators = validators.length;
   const activeValidators = validators.filter(v => v.status === 'active').length;
+  const inactiveValidators = validators.filter(v => v.status === 'inactive').length;
+  const slashedValidators = validators.filter(v => v.status === 'slashed').length;
   const averagePerformance = (validators.reduce((acc, v) => acc + v.performance, 0) / totalValidators).toFixed(1);
 
   // Group validators by region
@@ -346,16 +350,24 @@ const NetworkVisualization = () => {
   };
 
   // Mock data for charts
+  const currentAvgPerformance = (
+    validators.reduce((acc, v) => acc + v.performance, 0) / validators.length
+  ).toFixed(2);
+
+  const currentAvgUptime = 100;
+
+  const currentEvents = validators.length; // Or another metric you want
+
   const activityData = {
     dates: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    events: [120, 132, 101, 134, 90, 230, 210],
-    performance: [98.5, 97.8, 99.1, 98.7, 96.5, 98.9, 99.2],
-    uptime: [99.9, 99.8, 99.9, 99.7, 99.8, 99.9, 100],
+    events: Array(7).fill(currentEvents),
+    performance: Array(7).fill(currentAvgPerformance),
+    uptime: Array(7).fill(currentAvgUptime),
   };
 
   const statusData = [
     { 
-      value: 100, 
+      value: activeValidators, 
       name: 'Active',
       itemStyle: { 
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -365,7 +377,7 @@ const NetworkVisualization = () => {
       }
     },
     { 
-      value: 20, 
+      value: inactiveValidators, 
       name: 'Inactive',
       itemStyle: { 
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -375,7 +387,7 @@ const NetworkVisualization = () => {
       }
     },
     { 
-      value: 3, 
+      value: slashedValidators, 
       name: 'Slashed',
       itemStyle: { 
         color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
@@ -431,7 +443,7 @@ const NetworkVisualization = () => {
     },
     xAxis: {
       type: 'category',
-      data: activityData.dates,
+      data: ['Current'],
       axisLabel: { color: '#94a3b8', fontSize: 10 },
       axisLine: { lineStyle: { color: '#334155' } }
     },
@@ -457,7 +469,7 @@ const NetworkVisualization = () => {
       {
         name: 'Events',
         type: 'bar',
-        data: activityData.events,
+        data: [currentEvents],
         itemStyle: {
           color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
             { offset: 0, color: 'rgba(139, 92, 246, 0.8)' },
@@ -469,7 +481,7 @@ const NetworkVisualization = () => {
         name: 'Performance',
         type: 'line',
         yAxisIndex: 1,
-        data: activityData.performance,
+        data: [currentAvgPerformance],
         smooth: true,
         symbol: 'circle',
         symbolSize: 6,
@@ -480,7 +492,7 @@ const NetworkVisualization = () => {
         name: 'Uptime',
         type: 'line',
         yAxisIndex: 1,
-        data: activityData.uptime,
+        data: [currentAvgUptime],
         smooth: true,
         symbol: 'circle',
         symbolSize: 6,
@@ -613,6 +625,8 @@ const NetworkVisualization = () => {
       data: [{ value: event.value, name: event.name }]
     }))
   };
+
+  const latestProposer = latestProposers[0]; // Most recent
 
   return (
     <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-0 overflow-hidden">
@@ -786,11 +800,15 @@ const NetworkVisualization = () => {
                   if (!countryCoords) return null;
                   const finalLat = validator.lat + validator.latOffset;
                   const finalLng = validator.lng + validator.lngOffset;
+                  const isLatestProposer = validator.operatorAddress === latestProposer?.operatorAddress;
+                  const icon = isLatestProposer
+                    ? createGlowingIcon('#f59e0b', validator.status, true)
+                    : createGlowingIcon(getValidatorColor(validator.status, validator.performance), validator.status);
                   return (
                     <Marker
                       key={validator.id}
                       position={[finalLat, finalLng]}
-                      icon={createGlowingIcon(getValidatorColor(validator.status, validator.performance), validator.status)}
+                      icon={icon}
                     >
                       <Popup maxWidth={300}>
                         <div className="p-3 min-w-[250px]">
@@ -818,6 +836,12 @@ const NetworkVisualization = () => {
                               <span className="text-gray-300">Performance:</span>
                               <span className="text-white font-medium">{validator.performance.toFixed(1)}%</span>
                             </div>
+                            {isLatestProposer && (
+                              <div className="flex justify-between">
+                                <span className="text-yellow-400 font-bold">Latest Proposer</span>
+                                <span className="text-yellow-400 font-bold">★</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </Popup>
