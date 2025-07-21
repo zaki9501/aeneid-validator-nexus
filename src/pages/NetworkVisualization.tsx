@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -32,21 +33,6 @@ interface Validator {
   operatorAddress?: string;
 }
 
-interface TopValidator {
-  id: string;
-  name: string;
-  performance: number;
-  stake: string;
-}
-
-interface RecentEvent {
-  id: number;
-  type: string;
-  validator: string;
-  time: string;
-  status: 'success' | 'warning' | 'error';
-}
-
 interface BlockProposer {
   moniker: string;
   operatorAddress: string;
@@ -75,14 +61,7 @@ const countryCoordinates: { [key: string]: [number, number] } = {
   'The Netherlands': [52.1326, 5.2913]
 };
 
-// Add small random offset to prevent overlapping markers
-const getOffsetCoordinates = (lat: number, lng: number): [number, number] => {
-  const latOffset = (Math.random() - 0.5) * 2;
-  const lngOffset = (Math.random() - 0.5) * 2;
-  return [lat + latOffset, lng + lngOffset];
-};
-
-// Validators data from user
+// Validators data
 const validatorsData = [
   { id: '1', name: 'bangpateng', region: 'Europe', country: 'Germany', provider: 'AMAZON-02', operatorAddress: 'op1' },
   { id: '2', name: 'OneNov', region: 'Europe', country: 'Germany', provider: 'Contabo GmbH', operatorAddress: 'op2' },
@@ -235,7 +214,7 @@ const createValidatorsData = (): Validator[] => {
     const [baseLat, baseLng] = countryCoordinates[v.country] || [0, 0];
     // Generate a stable random offset per validator
     const seed = parseInt(v.id, 36) || idx;
-    const latOffset = ((Math.sin(seed) + 1) / 2 - 0.5) * 2; // deterministic pseudo-random
+    const latOffset = ((Math.sin(seed) + 1) / 2 - 0.5) * 2;
     const lngOffset = ((Math.cos(seed) + 1) / 2 - 0.5) * 2;
     return {
       ...v,
@@ -243,27 +222,25 @@ const createValidatorsData = (): Validator[] => {
       lng: baseLng,
       latOffset,
       lngOffset,
-      status: 'active', // or use real status if available
-      performance: 98 + Math.random() * 2, // random performance for demo
-      operatorAddress: v.operatorAddress || v.id // fallback to id if not present
+      status: 'active',
+      performance: 98 + Math.random() * 2,
+      operatorAddress: v.operatorAddress || v.id
     };
   });
 };
 
-// Create glowing icon function
-const createGlowingIcon = (color: string, status: string, highlight: boolean = false) => {
-  const size = status === 'active' ? 12 : 8;
+// Create custom marker icon
+const createCustomIcon = (color: string, size: number = 12) => {
   return L.divIcon({
-    className: `custom-marker ${highlight ? 'animate-pulse-subtle' : ''}`,
+    className: 'custom-marker',
     html: `
       <div style="
         width: ${size}px;
         height: ${size}px;
         background: ${color};
-        border: 2px solid white;
+        border: 2px solid #fff;
         border-radius: 50%;
-        box-shadow: 0 0 10px ${color}, 0 0 20px ${color}40;
-        animation: pulse 2s infinite;
+        box-shadow: 0 0 10px ${color}80;
         position: relative;
         z-index: 1000;
       "></div>
@@ -280,9 +257,12 @@ const NetworkVisualization = () => {
   const [loadingProposer, setLoadingProposer] = useState(false);
   const [proposerError, setProposerError] = useState<string | null>(null);
 
+  console.log('Validators data:', validators.length);
+
   useEffect(() => {
     let isMounted = true;
     let interval: NodeJS.Timeout;
+    
     const fetchLatestProposer = async () => {
       setLoadingProposer(true);
       setProposerError(null);
@@ -308,199 +288,44 @@ const NetworkVisualization = () => {
         if (isMounted) setLoadingProposer(false);
       }
     };
+
     fetchLatestProposer();
-    interval = setInterval(fetchLatestProposer, 2000); // Poll every 2 seconds
+    interval = setInterval(fetchLatestProposer, 2000);
+    
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
   }, []);
 
-  // Calculate statistics
-  const totalValidators = validators.length;
-  const activeValidators = validators.filter(v => v.status === 'active').length;
-  const inactiveValidators = validators.filter(v => v.status === 'inactive').length;
-  const slashedValidators = validators.filter(v => v.status === 'slashed').length;
-  const averagePerformance = (validators.reduce((acc, v) => acc + v.performance, 0) / totalValidators).toFixed(1);
-
-  // Group validators by region
-  const validatorsByRegion = validators.reduce((acc, v) => {
-    acc[v.region] = (acc[v.region] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  // Calculate top validators
-  const topValidators = useMemo(() => 
-    validators
-      .sort((a, b) => b.performance - a.performance)
-      .slice(0, 5)
-      .map(v => ({
-        id: v.id,
-        name: v.name,
-        performance: v.performance,
-        stake: `${(Math.random() * 1000 + 500).toFixed(0)}K` // Mock stake data
-      })), [validators]);
-
   const getValidatorColor = (status: string, performance: number): string => {
     if (status === 'slashed') return '#ef4444';
-    if (performance > 99) return '#10b981'; // Green for excellent
-    if (performance > 95) return '#3b82f6'; // Blue for good
-    if (performance > 90) return '#8b5cf6'; // Purple for fair
-    return '#f59e0b'; // Yellow for poor
+    if (performance > 99) return '#10b981';
+    if (performance > 95) return '#3b82f6';
+    if (performance > 90) return '#8b5cf6';
+    return '#f59e0b';
   };
 
-  // Mock data for charts
-  const currentAvgPerformance = (
-    validators.reduce((acc, v) => acc + v.performance, 0) / validators.length
-  ).toFixed(2);
+  const latestProposer = latestProposers[0];
 
-  const currentAvgUptime = 100;
-
-  const currentEvents = validators.length; // Or another metric you want
-
-  const activityData = {
-    dates: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-    events: Array(7).fill(currentEvents),
-    performance: Array(7).fill(currentAvgPerformance),
-    uptime: Array(7).fill(currentAvgUptime),
-  };
-
+  // Chart configurations
   const statusData = [
     { 
-      value: activeValidators, 
+      value: validators.filter(v => v.status === 'active').length, 
       name: 'Active',
-      itemStyle: { 
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: '#10b981' },
-          { offset: 1, color: '#059669' }
-        ])
-      }
+      itemStyle: { color: '#10b981' }
     },
     { 
-      value: inactiveValidators, 
+      value: validators.filter(v => v.status === 'inactive').length, 
       name: 'Inactive',
-      itemStyle: { 
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: '#6b7280' },
-          { offset: 1, color: '#4b5563' }
-        ])
-      }
+      itemStyle: { color: '#6b7280' }
     },
     { 
-      value: slashedValidators, 
+      value: validators.filter(v => v.status === 'slashed').length, 
       name: 'Slashed',
-      itemStyle: { 
-        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-          { offset: 0, color: '#ef4444' },
-          { offset: 1, color: '#dc2626' }
-        ])
-      }
+      itemStyle: { color: '#ef4444' }
     }
   ];
-
-  const eventTypes = [
-    { name: 'Proposals', value: 85, color: '#8b5cf6' },
-    { name: 'Attestations', value: 92, color: '#3b82f6' },
-    { name: 'Sync', value: 78, color: '#10b981' }
-  ];
-
-  const recentEvents: RecentEvent[] = [
-    { id: 1, type: 'Proposal', validator: 'Validator Alpha', time: '2m ago', status: 'success' },
-    { id: 2, type: 'Attestation', validator: 'Validator Beta', time: '5m ago', status: 'success' },
-    { id: 3, type: 'Sync', validator: 'Validator Gamma', time: '8m ago', status: 'warning' },
-    { id: 4, type: 'Proposal', validator: 'Validator Delta', time: '12m ago', status: 'success' },
-    { id: 5, type: 'Attestation', validator: 'Validator Epsilon', time: '15m ago', status: 'error' },
-  ];
-
-  const performanceTrendData = {
-    times: ['12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00'],
-    values: [96.5, 97.8, 98.2, 97.5, 98.8, 99.1, 98.7],
-    target: Array(7).fill(98)
-  };
-
-  // Chart Options
-  const activityChartOption = {
-    grid: {
-      top: 30,
-      right: 8,
-      bottom: 24,
-      left: 36,
-      containLabel: true
-    },
-    legend: {
-      data: ['Events', 'Performance', 'Uptime'],
-      textStyle: { color: '#94a3b8' },
-      top: 0,
-      right: 0,
-      itemWidth: 8,
-      itemHeight: 8
-    },
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(30, 41, 59, 0.95)',
-      borderColor: 'rgba(255, 255, 255, 0.1)',
-      textStyle: { color: '#fff' }
-    },
-    xAxis: {
-      type: 'category',
-      data: ['Current'],
-      axisLabel: { color: '#94a3b8', fontSize: 10 },
-      axisLine: { lineStyle: { color: '#334155' } }
-    },
-    yAxis: [
-      {
-        type: 'value',
-        name: 'Events',
-        nameTextStyle: { color: '#94a3b8', fontSize: 10 },
-        axisLabel: { color: '#94a3b8', fontSize: 10 },
-        splitLine: { lineStyle: { color: '#334155', type: 'dashed' } }
-      },
-      {
-        type: 'value',
-        name: 'Percentage',
-        nameTextStyle: { color: '#94a3b8', fontSize: 10 },
-        min: 95,
-        max: 100,
-        axisLabel: { color: '#94a3b8', fontSize: 10, formatter: '{value}%' },
-        splitLine: { show: false }
-      }
-    ],
-    series: [
-      {
-        name: 'Events',
-        type: 'bar',
-        data: [currentEvents],
-        itemStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(139, 92, 246, 0.8)' },
-            { offset: 1, color: 'rgba(139, 92, 246, 0.3)' }
-          ])
-        }
-      },
-      {
-        name: 'Performance',
-        type: 'line',
-        yAxisIndex: 1,
-        data: [currentAvgPerformance],
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 6,
-        lineStyle: { width: 2, color: '#10b981' },
-        itemStyle: { color: '#10b981' }
-      },
-      {
-        name: 'Uptime',
-        type: 'line',
-        yAxisIndex: 1,
-        data: [currentAvgUptime],
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 6,
-        lineStyle: { width: 2, color: '#3b82f6' },
-        itemStyle: { color: '#3b82f6' }
-      }
-    ]
-  };
 
   const statusChartOption = {
     tooltip: {
@@ -513,138 +338,45 @@ const NetworkVisualization = () => {
       type: 'pie',
       radius: ['50%', '70%'],
       center: ['50%', '50%'],
-      avoidLabelOverlap: true,
-      itemStyle: {
-        borderColor: '#1e293b',
-        borderWidth: 2
-      },
-      label: {
-        show: true,
-        position: 'outside',
-        formatter: '{b}\n{d}%',
-        color: '#94a3b8'
-      },
-      emphasis: {
-        label: {
-          show: true,
-          fontSize: 12,
-          fontWeight: 'bold'
-        }
-      },
       data: statusData
     }]
   };
 
-  const performanceTrendOption = {
-    grid: {
-      top: 15,
-      right: 5,
-      bottom: 20,
-      left: 30,
-      containLabel: true
-    },
-    tooltip: {
-      trigger: 'axis',
-      backgroundColor: 'rgba(30, 41, 59, 0.95)',
-      borderColor: 'rgba(255, 255, 255, 0.1)',
-      textStyle: { color: '#fff' }
-    },
-    xAxis: {
-      type: 'category',
-      data: performanceTrendData.times,
-      axisLabel: { color: '#94a3b8', fontSize: 10 },
-      axisLine: { lineStyle: { color: '#334155' } }
-    },
-    yAxis: {
-      type: 'value',
-      min: 95,
-      max: 100,
-      axisLabel: { color: '#94a3b8', fontSize: 10, formatter: '{value}%' },
-      splitLine: { lineStyle: { color: '#334155', type: 'dashed' } }
-    },
-    series: [
-      {
-        type: 'line',
-        data: performanceTrendData.values,
-        smooth: true,
-        symbol: 'circle',
-        symbolSize: 6,
-        lineStyle: { width: 2, color: '#8b5cf6' },
-        itemStyle: { color: '#8b5cf6' },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(139, 92, 246, 0.2)' },
-            { offset: 1, color: 'rgba(139, 92, 246, 0)' }
-          ])
-        }
-      },
-      {
-        type: 'line',
-        data: performanceTrendData.target,
-        lineStyle: { type: 'dashed', width: 1, color: '#475569' },
-        symbol: 'none'
-      }
-    ]
-  };
-
-  const gaugeOptions = {
-    series: eventTypes.map((event, index) => ({
-      type: 'gauge',
-      center: ['50%', `${25 + (index * 25)}%`],
-      radius: '20%',
-      startAngle: 90,
-      endAngle: -270,
-      pointer: { show: false },
-      progress: {
-        show: true,
-        overlap: false,
-        roundCap: true,
-        clip: false,
-        itemStyle: { color: event.color }
-      },
-      axisLine: {
-        lineStyle: {
-          width: 8,
-          color: [[1, 'rgba(255, 255, 255, 0.1)']]
-        }
-      },
-      splitLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { show: false },
-      title: {
-        fontSize: 10,
-        color: '#94a3b8',
-        offsetCenter: [0, '20%']
-      },
-      detail: {
-        fontSize: 14,
-        color: event.color,
-        offsetCenter: [0, 0],
-        formatter: '{value}%'
-      },
-      data: [{ value: event.value, name: event.name }]
-    }))
-  };
-
-  const latestProposer = latestProposers[0]; // Most recent
-
   return (
-    <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-0 overflow-hidden">
+    <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-2 overflow-hidden">
       <style>{`
-        @keyframes pulse-subtle {
-          0% { border-color: rgba(168, 85, 247, 0.2); }
-          50% { border-color: rgba(168, 85, 247, 0.4); }
-          100% { border-color: rgba(168, 85, 247, 0.2); }
+        .leaflet-container {
+          background: #0f172a !important;
+          height: 100%;
+          width: 100%;
+          border-radius: 0.5rem;
         }
-        .animate-pulse-subtle {
-          animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        .leaflet-tile {
+          filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+        }
+        .leaflet-control-container {
+          filter: invert(1);
+        }
+        .custom-marker {
+          z-index: 1000 !important;
+        }
+        .leaflet-popup-content-wrapper {
+          background: rgba(30, 41, 59, 0.95) !important;
+          color: #fff !important;
+          border: 1px solid rgba(255, 255, 255, 0.1) !important;
+          border-radius: 8px;
+        }
+        .leaflet-popup-tip {
+          background: rgba(30, 41, 59, 0.95) !important;
         }
       `}</style>
       
       {/* Top Bar */}
-      <div className="flex justify-between items-center mb-2 h-[40px] px-2">
+      <div className="flex justify-between items-center mb-2 h-[40px]">
         <div className="flex items-center gap-3">
-          <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">Story Testnet Network Dashboard</span>
+          <span className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            Story Testnet Network Dashboard
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <Input
@@ -658,17 +390,11 @@ const NetworkVisualization = () => {
       </div>
 
       {/* Main Dashboard Grid */}
-      <div className="grid grid-cols-12 gap-2 h-[calc(100vh-50px)] overflow-hidden px-2">
+      <div className="grid grid-cols-12 gap-2 h-[calc(100vh-50px)]">
         {/* Left Panel */}
-        <div className="col-span-12 md:col-span-2 flex flex-col gap-2">
-          <Card className="bg-white/5 border-white/10 p-4 h-[280px] flex flex-col justify-between relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-pink-500"></div>
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-white text-sm font-medium">Recent Block Proposers</div>
-              <div className="px-2 py-1 rounded-full bg-purple-500/20 border border-purple-500/30">
-                <span className="text-xs text-purple-300">Live</span>
-              </div>
-            </div>
+        <div className="col-span-2 flex flex-col gap-2">
+          <Card className="bg-white/5 border-white/10 p-4 h-[280px] flex flex-col">
+            <div className="text-white text-sm font-medium mb-3">Recent Block Proposers</div>
             {loadingProposer && latestProposers.length === 0 ? (
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-gray-400">Loading...</div>
@@ -678,27 +404,20 @@ const NetworkVisualization = () => {
                 <div className="text-red-400">{proposerError}</div>
               </div>
             ) : latestProposers.length > 0 ? (
-              <div className="flex-1 flex flex-col gap-2 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto space-y-2">
                 {latestProposers.map((proposer, idx) => (
                   <div
                     key={proposer.height}
-                    className={`flex items-center gap-3 bg-white/5 rounded-lg p-2 transition-all duration-300 ${idx === 0 ? 'animate-pulse-subtle border border-purple-500/30' : ''}`}
+                    className={`p-2 bg-white/5 rounded-lg ${idx === 0 ? 'border border-purple-500/30' : ''}`}
                   >
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500/30 to-pink-500/30 border border-purple-500/20 flex items-center justify-center text-sm font-bold text-purple-300">
-                      {proposer.moniker?.charAt(0) || '?'}
+                    <div className="text-sm font-semibold text-purple-300 truncate">
+                      {proposer.moniker}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-purple-300 truncate" title={proposer.moniker}>
-                        {proposer.moniker}
-                      </div>
-                      <div className="text-xs text-gray-400 truncate" title={proposer.operatorAddress}>
-                        {proposer.operatorAddress}
-                      </div>
+                    <div className="text-xs text-gray-400 truncate">
+                      {proposer.operatorAddress}
                     </div>
-                    <div className="flex flex-col items-end">
-                      <div className="text-xs text-gray-400">{new Date(proposer.time).toLocaleTimeString()}</div>
-                      <div className="text-[10px] text-gray-400 uppercase">Height:</div>
-                      <div className="text-sm font-medium text-white">{proposer.height.toLocaleString()}</div>
+                    <div className="text-xs text-white">
+                      Height: {proposer.height.toLocaleString()}
                     </div>
                   </div>
                 ))}
@@ -709,85 +428,47 @@ const NetworkVisualization = () => {
               </div>
             )}
           </Card>
-          <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
-            <ReactECharts option={activityChartOption} style={{ height: '100%' }} theme="dark" />
-          </Card>
-          <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
-            <ReactECharts option={statusChartOption} style={{ height: '100%' }} theme="dark" />
+          
+          <Card className="bg-white/5 border-white/10 p-2 h-[200px]">
+            <ReactECharts option={statusChartOption} style={{ height: '100%' }} />
           </Card>
         </div>
 
-        {/* Center Panel (Map + Top Stats) */}
-        <div className="col-span-12 md:col-span-8 flex flex-col gap-2">
+        {/* Center Panel (Map + Stats) */}
+        <div className="col-span-8 flex flex-col gap-2">
           {/* Top Stats */}
           <div className="grid grid-cols-4 gap-2">
             <Card className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/20 p-2 text-center">
-              <div className="text-xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">{validators.length}</div>
+              <div className="text-xl font-bold text-purple-400">{validators.length}</div>
               <div className="text-gray-400 text-xs">Total Validators</div>
             </Card>
             <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-500/20 p-2 text-center">
-              <div className="text-xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+              <div className="text-xl font-bold text-green-400">
                 {validators.filter(v => v.status === 'active').length}
               </div>
               <div className="text-gray-400 text-xs">Active</div>
             </Card>
             <Card className="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-500/20 p-2 text-center">
-              <div className="text-xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+              <div className="text-xl font-bold text-blue-400">
                 {new Set(validators.map(v => v.region)).size}
               </div>
               <div className="text-gray-400 text-xs">Regions</div>
             </Card>
             <Card className="bg-gradient-to-br from-yellow-500/10 to-orange-500/10 border-yellow-500/20 p-2 text-center">
-              <div className="text-xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent">
+              <div className="text-xl font-bold text-yellow-400">
                 {(validators.reduce((acc, v) => acc + v.performance, 0) / validators.length).toFixed(1)}%
               </div>
               <div className="text-gray-400 text-xs">Avg Performance</div>
             </Card>
           </div>
-          {/* World Map Visualization */}
-          <Card className="bg-white/5 border-white/10 p-2 flex-1 overflow-hidden">
-            <style>{`
-              .leaflet-container {
-                background: #0f172a !important;
-                height: 100%;
-                width: 100%;
-                border-radius: 0.5rem;
-                z-index: 1;
-              }
-              .leaflet-tile {
-                filter: none;
-              }
-              .leaflet-control-container {
-                filter: invert(1);
-              }
-              @keyframes pulse {
-                0% { transform: scale(1); opacity: 1; }
-                50% { transform: scale(1.2); opacity: 0.8; }
-                100% { transform: scale(1); opacity: 1; }
-              }
-              .custom-marker {
-                z-index: 1000 !important;
-              }
-              .leaflet-popup-content-wrapper {
-                background: rgba(30, 41, 59, 0.95) !important;
-                color: #fff !important;
-                border: 1px solid rgba(255, 255, 255, 0.1) !important;
-                backdrop-filter: blur(8px);
-                border-radius: 8px;
-              }
-              .leaflet-popup-tip {
-                background: rgba(30, 41, 59, 0.95) !important;
-              }
-              .leaflet-popup-close-button {
-                color: #fff !important;
-              }
-            `}</style>
+          
+          {/* World Map */}
+          <Card className="bg-white/5 border-white/10 p-2 flex-1">
             <MapContainer
               center={[20, 0]}
               zoom={2}
               minZoom={1}
               maxZoom={10}
-              scrollWheelZoom={true}
               style={{ height: '100%', width: '100%' }}
             >
               <TileLayer
@@ -796,51 +477,29 @@ const NetworkVisualization = () => {
               />
               <MarkerClusterGroup>
                 {validators.map((validator) => {
-                  const countryCoords = countryCoordinates[validator.country];
-                  if (!countryCoords) return null;
                   const finalLat = validator.lat + validator.latOffset;
                   const finalLng = validator.lng + validator.lngOffset;
                   const isLatestProposer = validator.operatorAddress === latestProposer?.operatorAddress;
-                  const icon = isLatestProposer
-                    ? createGlowingIcon('#f59e0b', validator.status, true)
-                    : createGlowingIcon(getValidatorColor(validator.status, validator.performance), validator.status);
+                  const color = isLatestProposer ? '#f59e0b' : getValidatorColor(validator.status, validator.performance);
+                  const size = isLatestProposer ? 16 : 12;
+                  
                   return (
                     <Marker
                       key={validator.id}
                       position={[finalLat, finalLng]}
-                      icon={icon}
+                      icon={createCustomIcon(color, size)}
                     >
                       <Popup maxWidth={300}>
                         <div className="p-3 min-w-[250px]">
-                          <h3 className="font-bold text-white mb-2 text-lg">{validator.name}</h3>
-                          <div className="text-sm space-y-2">
-                            <div className="flex justify-between">
-                              <span className="text-gray-300">Region:</span>
-                              <span className="text-white font-medium">{validator.region}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-300">Country:</span>
-                              <span className="text-white font-medium">{validator.country}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-300">Provider:</span>
-                              <span className="text-white font-medium text-xs">{validator.provider}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-300">Status:</span>
-                              <span className={`font-medium ${validator.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>
-                                {validator.status}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-300">Performance:</span>
-                              <span className="text-white font-medium">{validator.performance.toFixed(1)}%</span>
-                            </div>
+                          <h3 className="font-bold text-white mb-2">{validator.name}</h3>
+                          <div className="text-sm space-y-1">
+                            <div><span className="text-gray-300">Region:</span> <span className="text-white">{validator.region}</span></div>
+                            <div><span className="text-gray-300">Country:</span> <span className="text-white">{validator.country}</span></div>
+                            <div><span className="text-gray-300">Provider:</span> <span className="text-white text-xs">{validator.provider}</span></div>
+                            <div><span className="text-gray-300">Status:</span> <span className="text-green-400">{validator.status}</span></div>
+                            <div><span className="text-gray-300">Performance:</span> <span className="text-white">{validator.performance.toFixed(1)}%</span></div>
                             {isLatestProposer && (
-                              <div className="flex justify-between">
-                                <span className="text-yellow-400 font-bold">Latest Proposer</span>
-                                <span className="text-yellow-400 font-bold">★</span>
-                              </div>
+                              <div className="text-yellow-400 font-bold">★ Latest Proposer</div>
                             )}
                           </div>
                         </div>
@@ -854,35 +513,26 @@ const NetworkVisualization = () => {
         </div>
 
         {/* Right Panel */}
-        <div className="col-span-12 md:col-span-2 flex flex-col gap-2">
-          <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
-            <ReactECharts option={gaugeOptions} style={{ height: '100%' }} theme="dark" />
-          </Card>
-          <Card className="bg-white/5 border-white/10 p-2 h-[150px]">
-            <ReactECharts option={performanceTrendOption} style={{ height: '100%' }} theme="dark" />
-          </Card>
-          <Card className="bg-white/5 border-white/10 p-2 flex-1">
-            <div className="text-white text-sm font-medium mb-2">Recent Events</div>
-            <div className="space-y-2 overflow-auto max-h-[calc(100%-2rem)]">
-              {recentEvents.map((event) => (
-                <div
-                  key={event.id}
-                  className="bg-white/5 rounded-lg p-2 hover:bg-white/10 transition-colors border border-transparent hover:border-white/10"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${
-                        event.status === 'success' ? 'bg-emerald-500' :
-                        event.status === 'warning' ? 'bg-yellow-500' :
-                        'bg-red-500'
-                      }`} />
-                      <div className="text-sm text-gray-200">{event.type}</div>
-                    </div>
-                    <div className="text-xs text-gray-400">{event.time}</div>
-                  </div>
-                  <div className="mt-1 text-xs text-gray-400">{event.validator}</div>
-                </div>
-              ))}
+        <div className="col-span-2 flex flex-col gap-2">
+          <Card className="bg-white/5 border-white/10 p-4 flex-1">
+            <div className="text-white text-sm font-medium mb-3">Network Stats</div>
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Total Nodes</span>
+                <span className="text-white font-bold">{validators.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Active Nodes</span>
+                <span className="text-green-400 font-bold">{validators.filter(v => v.status === 'active').length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Countries</span>
+                <span className="text-blue-400 font-bold">{new Set(validators.map(v => v.country)).size}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Providers</span>
+                <span className="text-purple-400 font-bold">{new Set(validators.map(v => v.provider)).size}</span>
+              </div>
             </div>
           </Card>
         </div>
