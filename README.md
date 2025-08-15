@@ -1,73 +1,75 @@
-# Welcome to your Lovable project
+# 🌟 Aeneid Validator Nexus
 
-## Project info
+**A comprehensive validator monitoring and analytics platform for the Story Protocol testnet network.**
 
-**URL**: https://lovable.dev/projects/5df61cd1-d6d6-4963-8c5b-2f2002804b65
+![Story Protocol](https://img.shields.io/badge/Story%20Protocol-Testnet-red?style=for-the-badge)
+![React](https://img.shields.io/badge/React-18-blue?style=for-the-badge&logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)
+![Node.js](https://img.shields.io/badge/Node.js-Telegram%20Bot-green?style=for-the-badge&logo=node.js)
 
-## How can I edit this code?
+## 📋 Table of Contents
+- [Overview](#overview)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Project Structure](#project-structure)
+- [API Documentation](#api-documentation)
+- [Telegram Bot](#telegram-bot)
+- [Contributing](#contributing)
+- [License](#license)
 
-There are several ways of editing your application.
+## 🎯 Overview
 
-**Use Lovable**
+Aeneid Validator Nexus is a modern, comprehensive monitoring platform designed specifically for Story Protocol testnet validators. It provides real-time insights, geographic visualization, performance analytics, and automated alerting to help validators maintain optimal network participation.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/5df61cd1-d6d6-4963-8c5b-2f2002804b65) and start prompting.
+### 🌐 Live Demo
+- **Web Dashboard**: [Your deployment URL]
+- **Telegram Bot**: [@YourBotName](https://t.me/YourBotName)
 
-Changes made via Lovable will be committed automatically to this repo.
+## ✨ Features
 
-**Use your preferred IDE**
+### 🖥️ Web Dashboard
+- **Real-time Validator Monitoring** - Live uptime tracking and performance metrics
+- **Interactive World Map** - Geographic distribution of validators with location data
+- **Validator Explorer** - Comprehensive validator profiles and detailed analytics
+- **Network Analytics** - Network-wide statistics and tokenomics data
+- **Validator Comparison** - Side-by-side validator performance analysis
+- **Responsive Design** - Mobile-friendly interface with dark theme
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### 📱 Telegram Bot
+- **Real-time Alerts** - Instant notifications for missed blocks, jailing, and slashing
+- **Subscription Management** - Easy validator monitoring with persistent button interface
+- **Custom Alert Thresholds** - Configurable missed block alerts per validator
+- **Interactive Menu** - User-friendly button-based navigation
+- **Multi-user Support** - Individual subscriptions and alert preferences
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### 📊 Key Metrics Tracked
+- **Uptime Percentage** - Last 60 blocks and all-time uptime statistics
+- **Block Signing** - Signed vs missed blocks with visual indicators
+- **Validator Status** - Active, inactive, jailed, or slashed status
+- **Delegator Information** - Delegator count and stake distribution
+- **Commission Details** - Current rates and historical changes
+- **EVM Integration** - EVM address transaction data and balances
+- **Network Tokenomics** - Total supply, bonded tokens, and distribution
 
-Follow these steps:
+## 🏗️ Architecture
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Frontend Stack
+- **React 18** with TypeScript for type-safe development
+- **Vite** for fast development and optimized builds
+- **Tailwind CSS** for modern, responsive styling
+- **Shadcn/ui** components for consistent UI design
+- **Leaflet** for interactive map visualization
+- **React Query** for efficient data fetching and caching
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### Backend Services
+- **Express.js Proxy Server** - CORS handling and API aggregation
+- **Node.js Telegram Bot** - Real-time monitoring and alerts
+- **SQLite Database** - User subscriptions and alert preferences
+- **REST API Integration** - Story Protocol and ITRocket APIs
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Data Sources
+- **Story Protocol API** (`api-aeneid.storyscan.app`) - Primary validator data
+- **ITRocket API** (`api-story-testnet.itrocket.net`) - Slashing and signing info
+- **IP Geolocation APIs** - Validator geographic distribution
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/5df61cd1-d6d6-4963-8c5b-2f2002804b65) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)

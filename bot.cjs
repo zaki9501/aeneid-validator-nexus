@@ -36,24 +36,36 @@ db.prepare(`
   )
 `).run();
 
-// Show welcome message and Start button
+// Show welcome message with persistent menu
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
   bot.sendMessage(chatId,
-    `👋 Welcome to the Validator Alert Bot!\n\nClick the button below to get started.`,
+    `👋 Welcome to the Validator Alert Bot!\n\nUse the buttons below to manage your validator subscriptions:`,
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: 'Start', callback_data: 'show_menu' }]
+          [
+            { text: '🔔 Subscribe', callback_data: 'subscribe' },
+            { text: '❌ Unsubscribe', callback_data: 'unsubscribe' }
+          ],
+          [
+            { text: '📋 List Subscriptions', callback_data: 'list' },
+            { text: '⚙️ Set Alert', callback_data: 'set_alert' }
+          ],
+          [
+            { text: '❓ Help', callback_data: 'help' },
+            { text: '🏠 Main Menu', callback_data: 'show_menu' }
+          ]
         ]
       }
     }
   );
 });
 
-// Handle Start button and show main menu
+// Handle callback queries with persistent menu
 bot.on('callback_query', (query) => {
   const chatId = query.message.chat.id;
+  
   if (query.data === 'show_menu') {
     bot.editMessageText(
       `🚦 *Validator Alert Bot Menu*\n\nChoose an action below:`,
@@ -63,48 +75,212 @@ bot.on('callback_query', (query) => {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: 'Subscribe', callback_data: 'subscribe' }],
-            [{ text: 'Unsubscribe', callback_data: 'unsubscribe' }],
-            [{ text: 'List Subscriptions', callback_data: 'list' }],
-            [{ text: 'Set Alert', callback_data: 'set_alert' }],
-            [{ text: 'Help', callback_data: 'help' }]
+            [
+              { text: '🔔 Subscribe', callback_data: 'subscribe' },
+              { text: '❌ Unsubscribe', callback_data: 'unsubscribe' }
+            ],
+            [
+              { text: '📋 List Subscriptions', callback_data: 'list' },
+              { text: '⚙️ Set Alert', callback_data: 'set_alert' }
+            ],
+            [
+              { text: '❓ Help', callback_data: 'help' },
+              { text: '🏠 Main Menu', callback_data: 'show_menu' }
+            ]
           ]
         }
       }
     );
   } else if (query.data === 'help') {
-    bot.sendMessage(chatId,
-      `*Commands:*\n` +
-      `/subscribe <validator_address> — Subscribe to a validator\n` +
-      `/unsubscribe <validator_address> — Unsubscribe\n` +
-      `/list — List your subscriptions\n` +
-      `/help — Show this help message`,
-      { parse_mode: 'Markdown' }
+    bot.editMessageText(
+      `*📚 Validator Alert Bot Help*\n\n` +
+      `*Available Commands:*\n` +
+      `🔔 *Subscribe* — Add a validator to your watchlist\n` +
+      `❌ *Unsubscribe* — Remove a validator from your watchlist\n` +
+      `📋 *List Subscriptions* — View all your subscribed validators\n` +
+      `⚙️ *Set Alert* — Configure custom missed block thresholds\n` +
+      `❓ *Help* — Show this help message\n\n` +
+      `*Text Commands:*\n` +
+      `/start — Show main menu\n` +
+      `/subscribe <address> — Subscribe via text\n` +
+      `/unsubscribe <address> — Unsubscribe via text\n` +
+      `/list — List subscriptions\n` +
+      `/help — Show help\n\n` +
+      `*Features:*\n` +
+      `• Real-time validator monitoring\n` +
+      `• Missed block alerts\n` +
+      `• Jailed validator notifications\n` +
+      `• Slashed validator alerts\n` +
+      `• Custom alert thresholds`,
+      {
+        chat_id: chatId,
+        message_id: query.message.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]
+          ]
+        }
+      }
     );
   } else if (query.data === 'list') {
     const subs = db.prepare('SELECT validator_address FROM subscriptions WHERE chat_id = ?').all(chatId).map(row => row.validator_address);
     if (subs.length > 0) {
-      bot.sendMessage(chatId, `🔔 Your subscriptions:\n` + subs.map(a => `- \`${a}\``).join('\n'), { parse_mode: 'Markdown' });
+      bot.editMessageText(
+        `📋 *Your Subscriptions*\n\n` + subs.map((a, i) => `${i + 1}. \`${a}\``).join('\n'),
+        {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]
+            ]
+          }
+        }
+      );
     } else {
-      bot.sendMessage(chatId, `You have no subscriptions. Use /subscribe <validator_address> to add one.`);
+      bot.editMessageText(
+        `📋 *Your Subscriptions*\n\nYou have no subscriptions yet.\n\nUse the Subscribe button to add validators to your watchlist.`,
+        {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '🔔 Subscribe', callback_data: 'subscribe' },
+                { text: '🔙 Back to Menu', callback_data: 'show_menu' }
+              ]
+            ]
+          }
+        }
+      );
     }
   } else if (query.data === 'subscribe') {
-    bot.sendMessage(chatId, 'Please enter the validator address you want to subscribe to:');
+    bot.editMessageText(
+      `🔔 *Subscribe to Validator*\n\nPlease enter the validator address you want to subscribe to:\n\n*Example:* \`storyvaloper1abc123...\``,
+      {
+        chat_id: chatId,
+        message_id: query.message.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]
+          ]
+        }
+      }
+    );
     userInputState[chatId] = 'awaiting_subscribe';
   } else if (query.data === 'unsubscribe') {
-    bot.sendMessage(chatId, 'Please enter the validator address you want to unsubscribe from:');
-    userInputState[chatId] = 'awaiting_unsubscribe';
+    const subs = db.prepare('SELECT validator_address FROM subscriptions WHERE chat_id = ?').all(chatId);
+    if (subs.length === 0) {
+      bot.editMessageText(
+        `❌ *Unsubscribe*\n\nYou have no subscriptions to unsubscribe from.`,
+        {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]
+            ]
+          }
+        }
+      );
+    } else {
+      const buttons = subs.map(sub => [{ text: `❌ ${sub.validator_address.substring(0, 20)}...`, callback_data: `unsub_${sub.validator_address}` }]);
+      buttons.push([{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]);
+      
+      bot.editMessageText(
+        `❌ *Unsubscribe from Validator*\n\nSelect a validator to unsubscribe from:`,
+        {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: buttons
+          }
+        }
+      );
+    }
   } else if (query.data === 'set_alert') {
-    bot.sendMessage(chatId, 'Please enter the validator address you want to set a custom alert for:');
-    userInputState[chatId] = 'awaiting_alert_validator';
+    const subs = db.prepare('SELECT validator_address FROM subscriptions WHERE chat_id = ?').all(chatId);
+    if (subs.length === 0) {
+      bot.editMessageText(
+        `⚙️ *Set Custom Alert*\n\nYou need to subscribe to validators first before setting custom alerts.`,
+        {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '🔔 Subscribe', callback_data: 'subscribe' },
+                { text: '🔙 Back to Menu', callback_data: 'show_menu' }
+              ]
+            ]
+          }
+        }
+      );
+    } else {
+      const buttons = subs.map(sub => [{ text: `⚙️ ${sub.validator_address.substring(0, 20)}...`, callback_data: `alert_${sub.validator_address}` }]);
+      buttons.push([{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]);
+      
+      bot.editMessageText(
+        `⚙️ *Set Custom Alert*\n\nSelect a validator to set custom missed block threshold:`,
+        {
+          chat_id: chatId,
+          message_id: query.message.message_id,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: buttons
+          }
+        }
+      );
+    }
+  } else if (query.data.startsWith('unsub_')) {
+    const address = query.data.replace('unsub_', '');
+    db.prepare('DELETE FROM subscriptions WHERE chat_id = ? AND validator_address = ?').run(chatId, address);
+    bot.editMessageText(
+      `✅ *Unsubscribed Successfully*\n\nRemoved \`${address}\` from your subscriptions.`,
+      {
+        chat_id: chatId,
+        message_id: query.message.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]
+          ]
+        }
+      }
+    );
+  } else if (query.data.startsWith('alert_')) {
+    const address = query.data.replace('alert_', '');
+    userInputState[chatId] = { step: 'awaiting_alert_threshold', validator: address };
+    bot.editMessageText(
+      `⚙️ *Set Alert for ${address.substring(0, 20)}...*\n\nEnter the number of consecutive missed blocks to trigger an alert:\n\n*Current default:* ${MISSED_BLOCKS_THRESHOLD} blocks`,
+      {
+        chat_id: chatId,
+        message_id: query.message.message_id,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]
+          ]
+        }
+      }
+    );
   }
+  
   bot.answerCallbackQuery(query.id);
 });
 
-// Handle user text input for subscribe/unsubscribe
+// Handle user text input for subscribe/unsubscribe with persistent menu
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const state = userInputState[chatId];
+  
   if (state === 'awaiting_subscribe') {
     const address = msg.text.trim();
     db.prepare('INSERT OR IGNORE INTO subscriptions (chat_id, validator_address) VALUES (?, ?)').run(chatId, address);
@@ -129,26 +305,186 @@ bot.on('message', async (msg) => {
 ` +
         `*Address:* \`${address}\``;
 
-      await bot.sendMessage(chatId, `✅ Subscribed to validator: \`${address}\`\n\n${details}`, { parse_mode: 'Markdown' });
+      await bot.sendMessage(chatId, 
+        `✅ *Successfully Subscribed!*\n\n*Validator:* \`${address}\`\n\n${details}`, 
+        { 
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '📋 List Subscriptions', callback_data: 'list' },
+                { text: '🏠 Main Menu', callback_data: 'show_menu' }
+              ]
+            ]
+          }
+        }
+      );
     } catch (e) {
-      await bot.sendMessage(chatId, `✅ Subscribed to validator: \`${address}\`\n\n⚠️ Could not fetch validator details.`, { parse_mode: 'Markdown' });
+      await bot.sendMessage(chatId, 
+        `✅ *Successfully Subscribed!*\n\n*Validator:* \`${address}\`\n\n⚠️ Could not fetch validator details.`, 
+        { 
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '📋 List Subscriptions', callback_data: 'list' },
+                { text: '🏠 Main Menu', callback_data: 'show_menu' }
+              ]
+            ]
+          }
+        }
+      );
     }
 
     userInputState[chatId] = undefined;
   } else if (state === 'awaiting_unsubscribe') {
     const address = msg.text.trim();
     db.prepare('DELETE FROM subscriptions WHERE chat_id = ? AND validator_address = ?').run(chatId, address);
-    bot.sendMessage(chatId, `❎ Unsubscribed from validator: \`${address}\``, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, 
+      `❌ *Unsubscribed Successfully*\n\nRemoved \`${address}\` from your subscriptions.`, 
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '📋 List Subscriptions', callback_data: 'list' },
+              { text: '🏠 Main Menu', callback_data: 'show_menu' }
+            ]
+          ]
+        }
+      }
+    );
     userInputState[chatId] = undefined;
   } else if (state === 'awaiting_alert_validator') {
     userInputState[chatId] = { step: 'awaiting_alert_threshold', validator: msg.text.trim() };
-    bot.sendMessage(chatId, 'Enter the number of consecutive missed blocks to trigger an alert:');
+    bot.sendMessage(chatId, 
+      'Enter the number of consecutive missed blocks to trigger an alert:',
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]
+          ]
+        }
+      }
+    );
   } else if (state && typeof state === 'object' && state.step === 'awaiting_alert_threshold') {
     const validator = state.validator;
     const threshold = parseInt(msg.text.trim());
+    if (isNaN(threshold) || threshold < 1) {
+      bot.sendMessage(chatId, 
+        '❌ Invalid number. Please enter a valid number greater than 0.',
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]
+            ]
+          }
+        }
+      );
+      return;
+    }
     db.prepare('INSERT OR REPLACE INTO alert_settings (chat_id, validator_address, missed_blocks) VALUES (?, ?, ?)').run(chatId, validator, threshold);
-    bot.sendMessage(chatId, `🔔 Custom alert set for \`${validator}\`: ${threshold} consecutive missed blocks.`, { parse_mode: 'Markdown' });
+    bot.sendMessage(chatId, 
+      `⚙️ *Custom Alert Set Successfully*\n\n*Validator:* \`${validator}\`\n*Threshold:* ${threshold} consecutive missed blocks\n\nYou will now receive alerts when this validator misses more than ${threshold} blocks in a row.`, 
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '📋 List Subscriptions', callback_data: 'list' },
+              { text: '🏠 Main Menu', callback_data: 'show_menu' }
+            ]
+          ]
+        }
+      }
+    );
     userInputState[chatId] = undefined;
+  } else if (msg.text && msg.text.startsWith('/')) {
+    // Handle text commands
+    const command = msg.text.split(' ')[0];
+    if (command === '/start') {
+      bot.sendMessage(chatId,
+        `👋 Welcome to the Validator Alert Bot!\n\nUse the buttons below to manage your validator subscriptions:`,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [
+                { text: '🔔 Subscribe', callback_data: 'subscribe' },
+                { text: '❌ Unsubscribe', callback_data: 'unsubscribe' }
+              ],
+              [
+                { text: '📋 List Subscriptions', callback_data: 'list' },
+                { text: '⚙️ Set Alert', callback_data: 'set_alert' }
+              ],
+              [
+                { text: '❓ Help', callback_data: 'help' },
+                { text: '🏠 Main Menu', callback_data: 'show_menu' }
+              ]
+            ]
+          }
+        }
+      );
+    } else if (command === '/help') {
+      bot.sendMessage(chatId,
+        `*📚 Validator Alert Bot Help*\n\n` +
+        `*Available Commands:*\n` +
+        `🔔 *Subscribe* — Add a validator to your watchlist\n` +
+        `❌ *Unsubscribe* — Remove a validator from your watchlist\n` +
+        `📋 *List Subscriptions* — View all your subscribed validators\n` +
+        `⚙️ *Set Alert* — Configure custom missed block thresholds\n` +
+        `❓ *Help* — Show this help message\n\n` +
+        `*Text Commands:*\n` +
+        `/start — Show main menu\n` +
+        `/subscribe <address> — Subscribe via text\n` +
+        `/unsubscribe <address> — Unsubscribe via text\n` +
+        `/list — List subscriptions\n` +
+        `/help — Show help\n\n` +
+        `*Features:*\n` +
+        `• Real-time validator monitoring\n` +
+        `• Missed block alerts\n` +
+        `• Jailed validator notifications\n` +
+        `• Slashed validator alerts\n` +
+        `• Custom alert thresholds`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔙 Back to Menu', callback_data: 'show_menu' }]
+            ]
+          }
+        }
+      );
+    } else if (command === '/list') {
+      const subs = db.prepare('SELECT validator_address FROM subscriptions WHERE chat_id = ?').all(chatId).map(row => row.validator_address);
+      if (subs.length > 0) {
+        bot.sendMessage(chatId, 
+          `📋 *Your Subscriptions*\n\n` + subs.map((a, i) => `${i + 1}. \`${a}\``).join('\n'),
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🏠 Main Menu', callback_data: 'show_menu' }]
+              ]
+            }
+          }
+        );
+      } else {
+        bot.sendMessage(chatId, 
+          `📋 *Your Subscriptions*\n\nYou have no subscriptions yet.\n\nUse the Subscribe button to add validators to your watchlist.`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '🔔 Subscribe', callback_data: 'subscribe' },
+                  { text: '🏠 Main Menu', callback_data: 'show_menu' }
+                ]
+              ]
+            }
+          }
+        );
+      }
+    }
   }
 });
 

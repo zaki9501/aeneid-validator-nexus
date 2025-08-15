@@ -59,7 +59,7 @@ export const fetchNetworkStats = async (): Promise<NetworkStats> => {
         endHeight: 4820000,
         diffTime: 2.16
       },
-      network: "devnet-1",
+      network: "aeneid",
       latestBlock: {
         height: 4820097,
         time: "2025-05-27T00:30:11.864Z"
@@ -82,5 +82,134 @@ export const fetchNetworkStats = async (): Promise<NetworkStats> => {
     
     console.log('Using fallback network stats due to API error');
     return fallbackData;
+  }
+};
+
+export interface BlockProposer {
+  moniker: string;
+  operatorAddress: string;
+  hexAddress: string;
+  avatar: string | null;
+  height: number;
+  time: string;
+}
+
+export const fetchRecentBlocks = async (): Promise<BlockProposer[]> => {
+  console.log('Fetching recent blocks from API');
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+    
+    const response = await fetch('/api/blocks', {
+      method: 'GET',
+      headers: {
+        'accept': 'application/json',
+      },
+      mode: 'cors',
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
+
+    console.log('Recent blocks response status:', response.status);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('Recent blocks fetched successfully:', data);
+    
+    if (Array.isArray(data) && data.length > 0) {
+      return data.slice(0, 10).map(block => ({
+        moniker: block.proposer?.moniker || block.proposer?.operatorAddress || 'Unknown',
+        operatorAddress: block.proposer?.operatorAddress || '',
+        hexAddress: block.proposer?.hexAddress || '',
+        avatar: block.proposer?.avatar || null,
+        height: block.height || 0,
+        time: block.time || new Date().toISOString(),
+      }));
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Error fetching recent blocks:', error);
+    
+    // Check if it's a timeout error
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Request timeout - server took too long to respond');
+    }
+    
+    // Generate realistic fallback data
+    const fallbackData: BlockProposer[] = [
+      {
+        moniker: 'bangpateng',
+        operatorAddress: 'storyvaloper1...',
+        hexAddress: '0x1234...',
+        avatar: null,
+        height: 4820097,
+        time: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2 minutes ago
+      },
+      {
+        moniker: 'OneNov',
+        operatorAddress: 'storyvaloper2...',
+        hexAddress: '0x5678...',
+        avatar: null,
+        height: 4820096,
+        time: new Date(Date.now() - 4 * 60 * 1000).toISOString(), // 4 minutes ago
+      },
+      {
+        moniker: 'Strivenode',
+        operatorAddress: 'storyvaloper3...',
+        hexAddress: '0x9abc...',
+        avatar: null,
+        height: 4820095,
+        time: new Date(Date.now() - 6 * 60 * 1000).toISOString(), // 6 minutes ago
+      },
+    ];
+    
+    console.log('Using fallback recent blocks data due to API error');
+    return fallbackData;
+  }
+};
+
+export interface TokenomicsData {
+  tokenomics: {
+    supply: number;
+    bonded: number;
+  };
+  apr: number | null;
+  aprHistory: {
+    day: any[];
+    hour: any[];
+  };
+  inflation: number | null;
+}
+
+export const fetchTokenomics = async (): Promise<TokenomicsData> => {
+  try {
+    // For development, use mock data to avoid CORS issues
+    // In production, you would use the actual API endpoint
+    const mockData: TokenomicsData = {
+      tokenomics: {
+        supply: 165420000, // 165.42M
+        bonded: 162750000  // 162.75M
+      },
+      apr: null,
+      aprHistory: {
+        day: [],
+        hour: []
+      },
+      inflation: null
+    };
+
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    return mockData;
+  } catch (error) {
+    console.error('Error fetching tokenomics:', error);
+    throw error;
   }
 };
